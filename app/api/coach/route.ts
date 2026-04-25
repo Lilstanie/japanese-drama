@@ -1,11 +1,6 @@
 import OpenAI from "openai"
 import type { Message } from "@/lib/types"
 
-const client = new OpenAI({
-  apiKey: process.env.GROQ_API_KEY,
-  baseURL: "https://api.groq.com/openai/v1",
-})
-
 const COACH_SYSTEM_PROMPT = `你是一个亲切的中文日语教练，正在陪一个中文母语者学日语。
 你的任务是在每次日本角色说话后，用中文：
 1. 翻译那句日语（自然的中文，不要逐字翻译）
@@ -17,6 +12,11 @@ const COACH_QUESTION_SYSTEM_PROMPT = `你是一个亲切的中文日语教练，
 用户用@教练开头向你提问。请直接用中文回答他的问题，语气像朋友，简洁有用。`
 
 export async function POST(request: Request) {
+  const client = new OpenAI({
+    apiKey: process.env.GROQ_API_KEY,
+    baseURL: "https://api.groq.com/openai/v1",
+  })
+
   const { characterLine, dialogMessages, isDirectQuestion, question } =
     await request.json() as {
       characterLine?: string

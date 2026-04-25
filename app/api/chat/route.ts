@@ -2,12 +2,11 @@ import OpenAI from "openai"
 import { getScenario } from "@/lib/scenarios"
 import type { Message } from "@/lib/types"
 
-const client = new OpenAI({
-  apiKey: process.env.GROQ_API_KEY,
-  baseURL: "https://api.groq.com/openai/v1",
-})
-
 export async function POST(request: Request) {
+  const client = new OpenAI({
+    apiKey: process.env.GROQ_API_KEY,
+    baseURL: "https://api.groq.com/openai/v1",
+  })
   const { scenarioId, messages, userInput } = await request.json() as {
     scenarioId: string
     messages: Message[]
