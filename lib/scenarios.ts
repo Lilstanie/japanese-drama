@@ -1,6 +1,6 @@
 import type { Scenario } from "./types"
 
-export const SCENARIOS: Scenario[] = [
+const BASE_SCENARIOS: Scenario[] = [
   {
     id: "convenience-store",
     title: "便利店",
@@ -32,6 +32,19 @@ export const SCENARIOS: Scenario[] = [
     difficulty: "N5",
   },
 ]
+
+function loadExtraScenarios(): Scenario[] {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require(process.cwd() + "/hidden/extra-scenarios")
+    const extras: unknown = mod?.EXTRA_SCENARIOS ?? mod?.default
+    return Array.isArray(extras) ? (extras as Scenario[]) : []
+  } catch {
+    return []
+  }
+}
+
+export const SCENARIOS: Scenario[] = [...BASE_SCENARIOS, ...loadExtraScenarios()]
 
 export function getScenario(id: string): Scenario | undefined {
   return SCENARIOS.find((s) => s.id === id)

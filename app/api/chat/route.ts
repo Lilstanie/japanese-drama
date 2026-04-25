@@ -18,13 +18,21 @@ export async function POST(request: Request) {
     return Response.json({ error: "Scenario not found" }, { status: 404 })
   }
 
+  function loadExtraPrompt(id: string): string {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mod = require(process.cwd() + "/hidden/prompt-overrides")
+      return typeof mod?.getExtraPrompt === "function" ? (mod.getExtraPrompt(id) as string) : ""
+    } catch { return "" }
+  }
+
   const systemPrompt = `You are ${scenario.character.name}, a ${scenario.character.role} in Japan.
 Speak only in Japanese. Stay fully in character at all times.
 Use natural, conversational Japanese appropriate for the setting.
 For difficult kanji, add furigana in parentheses like: 食べ物(たべもの).
 Keep responses 1-3 sentences — natural conversation pace.
 The person you're speaking with is a learner, so be patient and speak clearly.
-Current scenario: ${scenario.description}`
+Current scenario: ${scenario.description}${loadExtraPrompt(scenario.id)}`
 
   const history = messages.slice(-10).map((m) => ({
     role: m.role === "user" ? ("user" as const) : ("assistant" as const),
