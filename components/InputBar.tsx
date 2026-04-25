@@ -16,6 +16,14 @@ export default function InputBar({
   const [value, setValue] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // Auto-resize textarea height as user types
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = Math.min(el.scrollHeight, 120) + "px"
+  }, [value])
+
   useEffect(() => {
     if (!disabled) textareaRef.current?.focus()
   }, [disabled])
