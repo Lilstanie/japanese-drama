@@ -19,10 +19,11 @@ export async function POST(request: Request) {
   }
 
   function loadExtraPrompt(id: string): string {
+    const raw = process.env.EXTRA_PROMPTS_JSON
+    if (!raw) return ""
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const mod = require(process.cwd() + "/hidden/prompt-overrides")
-      return typeof mod?.getExtraPrompt === "function" ? (mod.getExtraPrompt(id) as string) : ""
+      const map = JSON.parse(raw) as Record<string, string>
+      return map[id] ?? ""
     } catch { return "" }
   }
 

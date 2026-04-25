@@ -34,11 +34,10 @@ const BASE_SCENARIOS: Scenario[] = [
 ]
 
 function loadExtraScenarios(): Scenario[] {
+  const raw = process.env.EXTRA_SCENARIOS_JSON
+  if (!raw) return []
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require(process.cwd() + "/hidden/extra-scenarios")
-    const extras: unknown = mod?.EXTRA_SCENARIOS ?? mod?.default
-    return Array.isArray(extras) ? (extras as Scenario[]) : []
+    return JSON.parse(raw) as Scenario[]
   } catch {
     return []
   }
