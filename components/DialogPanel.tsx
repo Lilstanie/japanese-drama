@@ -3,25 +3,11 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import type { Message } from "@/lib/types"
 import { convertToRomaji } from "@/lib/romaji"
+import FuriganaText from "@/components/FuriganaText"
 
 function stripFurigana(text: string): string {
-  return text.replace(/\(([ぁ-んァ-ン]+)\)/g, "")
-}
-
-function renderFurigana(text: string) {
-  const parts = text.split(/(\S+\([ぁ-ん]+\))/g)
-  return parts.map((part, i) => {
-    const match = part.match(/^(.+)\(([ぁ-ん]+)\)$/)
-    if (match) {
-      return (
-        <ruby key={i}>
-          {match[1]}
-          <rt style={{ fontSize: "0.65em", color: "#f59e0b" }}>{match[2]}</rt>
-        </ruby>
-      )
-    }
-    return <span key={i}>{part}</span>
-  })
+  // Strip both half-width () and full-width （）; also allow ー (long vowel) inside readings
+  return text.replace(/[（(][ぁ-んァ-ンー]+[)）]/g, "")
 }
 
 function isFemaleVoice(name: string) {
@@ -142,7 +128,7 @@ function Bubble({
             {characterName}
           </div>
         )}
-        <div>{renderFurigana(msg.content)}</div>
+        <div className="ruby-text"><FuriganaText text={msg.content} /></div>
         {showRomaji && (
           <div className="mt-1.5 text-xs italic leading-snug border-t pt-1"
             style={{ color: isUser ? "#f0c080" : "#a07850", borderColor: isUser ? "#9c6b24" : "#3d2010" }}>
@@ -166,6 +152,8 @@ export default function DialogPanel({
   const [jaVoices, setJaVoices] = useState<SpeechSynthesisVoice[]>([])
   const [charVoice, setCharVoice] = useState("")
   const [userVoice, setUserVoice] = useState("")
+  const [autoPlay, setAutoPlay] = useState(false)
+  const prevLengthRef = useRef(messages.length)
 
   useEffect(() => {
     function load() {
@@ -187,6 +175,19 @@ export default function DialogPanel({
   }, [messages, streamingText])
 
   useEffect(() => () => { window.speechSynthesis?.cancel() }, [])
+
+  // Auto-play new character lines when the feature is enabled
+  useEffect(() => {
+    if (!autoPlay) { prevLengthRef.current = messages.length; return }
+    if (messages.length > prevLengthRef.current && !isStreaming) {
+      const last = messages[messages.length - 1]
+      if (last && last.role === "character" && charVoice) {
+        speak(last.content, charVoice, () => setPlayingId(null))
+        setPlayingId(last.id)
+      }
+    }
+    prevLengthRef.current = messages.length
+  }, [messages, isStreaming, autoPlay, charVoice])
 
   const handlePlay = useCallback((id: string, text: string) => {
     // find the message to know if it's user or character
@@ -214,9 +215,9 @@ export default function DialogPanel({
         <span className="text-xs" style={{ color: "#7a5c38" }}>との会話</span>
       </div>
 
-      {/* Header row 2: voice selectors */}
+      {/* Header row 2: voice selectors + auto-play */}
       {jaVoices.length > 0 && (
-        <div className="px-4 pb-2 border-b flex flex-wrap gap-x-3 gap-y-1"
+        <div className="px-4 pb-2 border-b flex flex-wrap gap-x-3 gap-y-1 items-center"
           style={{ borderColor: "#3d2010", background: "#1a0c02" }}>
           <VoiceSelect
             label="角色声音"
@@ -230,6 +231,17 @@ export default function DialogPanel({
             value={userVoice}
             onChange={v => { setUserVoice(v); window.speechSynthesis?.cancel(); setPlayingId(null) }}
           />
+          <button
+            onClick={() => setAutoPlay(v => !v)}
+            className="ml-auto text-xs px-2.5 py-1 rounded-lg border transition-all"
+            title={autoPlay ? "关闭自动朗读" : "开启自动朗读角色台词"}
+            style={autoPlay
+              ? { background: "#f59e0b22", color: "#f59e0b", borderColor: "#f59e0b55" }
+              : { background: "transparent", color: "#5c3d1e", borderColor: "#3d2010" }
+            }
+          >
+            {autoPlay ? "🔊 自动" : "🔇 手动"}
+          </button>
         </div>
       )}
 
@@ -245,7 +257,7 @@ export default function DialogPanel({
             <div className="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed"
               style={{ background: "#2d1508", color: "#f0d5a0", border: "1px solid #5c3010", borderBottomLeftRadius: "4px" }}>
               <div className="text-xs mb-1 font-semibold" style={{ color: "#f59e0b" }}>{characterName}</div>
-              <div>{renderFurigana(streamingText)}</div>
+              <div className="ruby-text"><FuriganaText text={streamingText} /></div>
               {showRomaji && (
                 <div className="mt-1.5 text-xs italic leading-snug border-t pt-1"
                   style={{ color: "#a07850", borderColor: "#3d2010" }}>

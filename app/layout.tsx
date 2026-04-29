@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "日本語ドラマ | 沉浸式日语学习",
   description: "沉浸式情景对话，中文教练实时辅助，学习日语从未如此自然",
+  icons: { icon: "/logo.png", apple: "/logo.png" },
 };
 
 export default function RootLayout({

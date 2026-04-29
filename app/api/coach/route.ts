@@ -1,15 +1,20 @@
 import OpenAI from "openai"
 import type { Message } from "@/lib/types"
+import { getScenario } from "@/lib/scenarios"
 
-const COACH_SYSTEM_PROMPT = `你是一个亲切的中文日语教练，正在陪一个中文母语者学日语。
+function buildCoachPrompt(scenarioContext: string) {
+  return `你是一个亲切的中文日语教练，正在陪一个中文母语者学日语。${scenarioContext}
 你的任务是在每次日本角色说话后，用中文：
 1. 翻译那句日语（自然的中文，不要逐字翻译）
 2. 点出1-2个值得学的语法点或词汇，简短解释
 3. 给出1-2个用户可以回应的日语句子建议（附中文意思）
 语气要像朋友，不要像教科书。简洁，有趣。`
+}
 
-const COACH_QUESTION_SYSTEM_PROMPT = `你是一个亲切的中文日语教练，正在陪一个中文母语者学日语。
+function buildQuestionPrompt(scenarioContext: string) {
+  return `你是一个亲切的中文日语教练，正在陪一个中文母语者学日语。${scenarioContext}
 用户用@教练开头向你提问。请直接用中文回答他的问题，语气像朋友，简洁有用。`
+}
 
 export async function POST(request: Request) {
   const client = new OpenAI({
@@ -17,13 +22,19 @@ export async function POST(request: Request) {
     baseURL: "https://api.groq.com/openai/v1",
   })
 
-  const { characterLine, dialogMessages, isDirectQuestion, question } =
+  const { characterLine, dialogMessages, isDirectQuestion, question, scenarioId } =
     await request.json() as {
       characterLine?: string
       dialogMessages: Message[]
       isDirectQuestion?: boolean
       question?: string
+      scenarioId?: string
     }
+
+  const scenario = scenarioId ? getScenario(scenarioId) : undefined
+  const scenarioContext = scenario
+    ? `\n当前学习场景：${scenario.description}（角色：${scenario.character.name}，${scenario.character.role}）\n`
+    : "\n"
 
   const encoder = new TextEncoder()
 
@@ -35,7 +46,7 @@ export async function POST(request: Request) {
             model: "llama-3.3-70b-versatile",
             max_tokens: 512,
             messages: [
-              { role: "system", content: COACH_QUESTION_SYSTEM_PROMPT },
+              { role: "system", content: buildQuestionPrompt(scenarioContext) },
               { role: "user", content: question },
             ],
             stream: true,
@@ -57,7 +68,7 @@ export async function POST(request: Request) {
             model: "llama-3.3-70b-versatile",
             max_tokens: 512,
             messages: [
-              { role: "system", content: COACH_SYSTEM_PROMPT },
+              { role: "system", content: buildCoachPrompt(scenarioContext) },
               { role: "user", content: userMessage },
             ],
             stream: true,

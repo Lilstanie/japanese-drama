@@ -1,0 +1,60 @@
+export const PODCAST_TOPICS = [
+  {
+    id: "izakaya",
+    label: "居酒屋での会話",
+    labelZh: "居酒屋聊天",
+    emoji: "🍺",
+    difficulty: "N4" as const,
+    seed: "Kenji and Wei are unwinding after work at their favorite izakaya in Shinjuku.",
+  },
+  {
+    id: "travel-plans",
+    label: "旅行の計画",
+    labelZh: "旅行计划",
+    emoji: "✈️",
+    difficulty: "N5" as const,
+    seed: "Kenji and Wei are planning a weekend trip to Kyoto together.",
+  },
+  {
+    id: "food",
+    label: "食べ物の話",
+    labelZh: "聊美食",
+    emoji: "🍜",
+    difficulty: "N5" as const,
+    seed: "Kenji is teaching Wei about Japanese regional foods. Wei is comparing them to Chinese dishes.",
+  },
+  {
+    id: "anime",
+    label: "アニメ・漫画",
+    labelZh: "动漫话题",
+    emoji: "🎌",
+    difficulty: "N4" as const,
+    seed: "Kenji and Wei are debating their favorite anime. Wei is a huge fan of One Piece.",
+  },
+  {
+    id: "work",
+    label: "仕事の愚痴",
+    labelZh: "吐槽工作",
+    emoji: "💼",
+    difficulty: "N3" as const,
+    seed: "Kenji and Wei are complaining about their workweeks. Both had rough days.",
+  },
+  {
+    id: "ski-resort",
+    label: "スキー場の話",
+    labelZh: "聊滑雪",
+    emoji: "🏂",
+    difficulty: "N4" as const,
+    seed: "Kenji is teaching Wei how to snowboard at Hakuba resort in Nagano. Wei is a total beginner and keeps falling. Kenji is excited and full of snowboard tips.",
+  },
+  {
+    id: "shopping",
+    label: "買い物",
+    labelZh: "逛街购物",
+    emoji: "🛍️",
+    difficulty: "N5" as const,
+    seed: "Kenji and Wei are shopping in Shibuya. Wei wants to buy souvenirs but can't read the product descriptions. Kenji helps explain what things are.",
+  },
+]
+
+export type PodcastTopic = (typeof PODCAST_TOPICS)[number]

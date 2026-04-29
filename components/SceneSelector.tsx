@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import type { Scenario } from "@/lib/types"
 
 const DIFFICULTY_COLORS: Record<string, string> = {
@@ -13,10 +14,15 @@ export default function SceneSelector({ scenarios }: { scenarios: Scenario[] }) 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-16"
       style={{ background: "#1a1008" }}>
-      <div className="mb-12 text-center">
-        <h1 className="text-4xl font-bold mb-3" style={{ color: "#f59e0b", fontFamily: "serif" }}>
-          日本語ドラマ
-        </h1>
+      <div className="mb-12 text-center flex flex-col items-center gap-3">
+        <Image
+          src="/logo.png"
+          alt="日本語ドラマ"
+          width={110}
+          height={110}
+          className="rounded-2xl shadow-lg"
+          priority
+        />
         <p className="text-lg" style={{ color: "#d4a96a" }}>
           沉浸式情景对话练习 · 中文教练实时辅助
         </p>
@@ -58,6 +64,73 @@ export default function SceneSelector({ scenarios }: { scenarios: Scenario[] }) 
             </div>
           </Link>
         ))}
+
+        {/* Podcast card */}
+        <Link href="/podcast">
+          <div
+            className="rounded-xl border p-6 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-xl"
+            style={{
+              background: "#10101a",
+              borderColor: "#2a2050",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+            }}
+          >
+            <div className="text-5xl mb-4 text-center">🎙️</div>
+            <div className="text-center mb-3">
+              <span className="text-xl font-bold" style={{ color: "#a78bfa", fontFamily: "serif" }}>
+                物語 Podcast
+              </span>
+              <span className="ml-2 text-sm" style={{ color: "#4c3a7a" }}>
+                双语播客
+              </span>
+            </div>
+            <p className="text-sm text-center mb-4" style={{ color: "#6d5aab" }}>
+              听Kenji和Wei用日中双语自由聊天
+            </p>
+            <div className="flex items-center justify-between">
+              <span className="text-xs" style={{ color: "#4c3a7a" }}>🇯🇵 日本語 · 🇨🇳 中文</span>
+              <span
+                className="text-xs px-2 py-0.5 rounded border"
+                style={{ background: "rgba(42,32,80,0.6)", color: "#a78bfa", borderColor: "#2a2050" }}
+              >
+                Podcast
+              </span>
+            </div>
+          </div>
+        </Link>
+
+        {/* Kana practice card */}
+        <Link href="/practice">
+          <div
+            className="rounded-xl border p-6 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-xl"
+            style={{
+              background: "#0e1a10",
+              borderColor: "#1e4028",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+            }}
+          >
+            <div className="text-5xl mb-4 text-center">📖</div>
+            <div className="text-center mb-3">
+              <span className="text-xl font-bold" style={{ color: "#4ade80", fontFamily: "serif" }}>
+                仮名練習
+              </span>
+              <span className="ml-2 text-sm" style={{ color: "#2d6040" }}>
+                字母学习
+              </span>
+            </div>
+            <p className="text-sm text-center mb-4" style={{ color: "#3a7a50" }}>
+              平仮名・片仮名对照表及测试练习
+            </p>
+            <div className="flex items-center justify-end">
+              <span
+                className="text-xs px-2 py-0.5 rounded border"
+                style={{ background: "rgba(30,64,40,0.6)", color: "#4ade80", borderColor: "#1e4028" }}
+              >
+                基础
+              </span>
+            </div>
+          </div>
+        </Link>
       </div>
 
       <p className="mt-12 text-sm" style={{ color: "#5c3d1e" }}>
