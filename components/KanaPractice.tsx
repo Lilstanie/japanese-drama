@@ -12,9 +12,17 @@ type KanaStats = Record<string, { correct: number; wrong: number }>
 type KanaProgressSnapshot = {
   tab: Tab
   showOrigin: boolean
+  hideVoiced?: boolean
   inputsByTab: Record<Tab, Record<string, string>>
   stats: KanaStats
   updatedAt: string
+}
+
+type KanaPracticeMode = "memorise" | "quiz"
+
+function isVoicedRowLabel(label: string) {
+  // Ga/Za/Da/Ba/Pa rows in both hiragana and katakana
+  return /[がざだばぱ]行/.test(label) || /[ガザダバパ]行/.test(label)
 }
 
 function getStatus(entry: KanaEntry, val: string): Status {
@@ -27,6 +35,78 @@ const CELL_STYLE: Record<Status, { bg: string; border: string; color: string; in
   idle:    { bg: "#0f172a", border: "#334155",  color: "#7dd3fc", inputBg: "#111827" },
   correct: { bg: "#061408", border: "#22c55e",  color: "#4ade80", inputBg: "#0a2010" },
   wrong:   { bg: "#1b1120", border: "#f87171",  color: "#7dd3fc", inputBg: "#221326" },
+}
+
+function getRomajiDisplay(entry: KanaEntry): string {
+  return Array.isArray(entry.romaji) ? entry.romaji.join("/") : entry.romaji
+}
+
+function KanaMemoriseCell({
+  entry,
+  showOrigin,
+}: {
+  entry: KanaEntry
+  showOrigin: boolean
+}) {
+  return (
+    <div
+      className="flex flex-col items-center gap-1 rounded-xl pt-2 pb-2 px-1"
+      style={{ background: "#0b1220", border: "1px solid #1e293b" }}
+    >
+      {showOrigin && (
+        <div className="text-xs leading-none" style={{ color: "#94a3b8" }}>
+          {entry.origin}
+        </div>
+      )}
+
+      <div
+        className="text-3xl font-bold leading-none select-none"
+        style={{ color: "#7dd3fc", fontFamily: "serif" }}
+      >
+        {entry.kana}
+      </div>
+
+      <div className="text-[11px] leading-none" style={{ color: "#94a3b8" }}>
+        {getRomajiDisplay(entry)}
+      </div>
+    </div>
+  )
+}
+
+function KanaMemoriseGrid({
+  rows,
+  showOrigin,
+}: {
+  rows: KanaRow[]
+  showOrigin: boolean
+}) {
+  return (
+    <div className="flex flex-col gap-6">
+      {rows.map((row) => (
+        <div key={row.label}>
+          <div
+            className="text-xs font-medium mb-2 px-1"
+            style={{ color: "#94a3b8", letterSpacing: "0.05em" }}
+          >
+            {row.label}
+          </div>
+          <div className="grid grid-cols-5 gap-2">
+            {row.cells.map((cell, i) =>
+              cell ? (
+                <KanaMemoriseCell key={cell.kana} entry={cell} showOrigin={showOrigin} />
+              ) : (
+                <div
+                  key={i}
+                  className="rounded-xl"
+                  style={{ background: "#0b1220", border: "1px solid #1e293b" }}
+                />
+              ),
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function KanaCell({
@@ -82,7 +162,8 @@ function KanaCell({
           color: s === "correct" ? "#4ade80" : s === "wrong" ? "#f87171" : "#cbd5e1",
           caretColor: "#7dd3fc",
         }}
-        placeholder={Array.isArray(entry.romaji) ? entry.romaji[0] : entry.romaji}
+        // Don't leak the answer: use a generic placeholder instead of real romaji.
+        placeholder="romaji"
       />
     </div>
   )
@@ -105,7 +186,7 @@ function KanaGrid({
 }) {
   return (
     <div className="flex flex-col gap-5">
-      {rows.map(row => (
+      {rows.map((row) => (
         <div key={row.label}>
           <div
             className="text-xs font-medium mb-2 px-1"
@@ -134,10 +215,11 @@ function KanaGrid({
   )
 }
 
-export default function KanaPractice() {
+export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPracticeMode }) {
   const [tab, setTab] = useState<Tab>("hiragana")
   const [inputs, setInputs] = useState<Record<string, string>>({})
   const [showOrigin, setShowOrigin] = useState(true)
+  const [hideVoiced, setHideVoiced] = useState(false)
   const [stats, setStats] = useState<KanaStats>({})
   const [inputsByTab, setInputsByTab] = useState<Record<Tab, Record<string, string>>>({
     hiragana: {},
@@ -150,18 +232,23 @@ export default function KanaPractice() {
     return Object.fromEntries(allEntries.map((entry) => [entry.kana, entry])) as Record<string, KanaEntry>
   }, [])
 
-  const rows = tab === "hiragana" ? HIRAGANA_ROWS : KATAKANA_ROWS
+  const baseRows = tab === "hiragana" ? HIRAGANA_ROWS : KATAKANA_ROWS
+  const rows = hideVoiced ? baseRows.filter(r => !isVoicedRowLabel(r.label)) : baseRows
   const allEntries = rows.flatMap(r => r.cells.filter((c): c is KanaEntry => c !== null))
   const correctCount = allEntries.filter(e => getStatus(e, inputs[e.kana] ?? "") === "correct").length
   const total = allEntries.length
   const pct = total ? Math.round((correctCount / total) * 100) : 0
   const allDone = correctCount === total && total > 0
+  const isQuiz = mode === "quiz"
+  const totalCorrect = Object.values(stats).reduce((sum, s) => sum + s.correct, 0)
+  const totalWrong = Object.values(stats).reduce((sum, s) => sum + s.wrong, 0)
 
   useEffect(() => {
     const saved = getFromStorage<KanaProgressSnapshot>(KANA_PROGRESS_STORAGE_KEY)
     if (!saved) return
     setTab(saved.tab)
     setShowOrigin(saved.showOrigin)
+    setHideVoiced(saved.hideVoiced ?? false)
     setInputsByTab(saved.inputsByTab ?? { hiragana: {}, katakana: {} })
     setInputs(saved.inputsByTab?.[saved.tab] ?? {})
     setStats(saved.stats ?? {})
@@ -172,13 +259,14 @@ export default function KanaPractice() {
       setToStorage<KanaProgressSnapshot>(KANA_PROGRESS_STORAGE_KEY, {
         tab,
         showOrigin,
+        hideVoiced,
         inputsByTab,
         stats,
         updatedAt: new Date().toISOString(),
       })
     }, 300)
     return () => clearTimeout(timer)
-  }, [tab, showOrigin, inputsByTab, stats])
+  }, [tab, showOrigin, hideVoiced, inputsByTab, stats])
 
   function handleInput(kana: string, val: string) {
     const entry = allEntriesMap[kana]
@@ -223,6 +311,7 @@ export default function KanaPractice() {
     setStats({})
     setTab("hiragana")
     setShowOrigin(true)
+    setHideVoiced(false)
     removeFromStorage(KANA_PROGRESS_STORAGE_KEY)
   }
 
@@ -235,32 +324,37 @@ export default function KanaPractice() {
       >
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
           <Link
-            href="/"
+            href={isQuiz ? "/practice" : "/"}
             className="text-sm px-3 py-1.5 rounded-lg border flex-shrink-0"
             style={{ color: "#7dd3fc", borderColor: "#334155" }}
           >
-            ← 戻る
+            {isQuiz ? "← 返回记忆表" : "← 戻る"}
           </Link>
 
           <div className="flex-1 min-w-0">
-            {/* progress bar */}
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "#1e293b" }}>
-                <div
-                  className="h-2 rounded-full transition-all duration-300"
-                  style={{
-                    width: `${pct}%`,
-                    background: allDone ? "#4ade80" : "#38bdf8",
-                  }}
-                />
+            {isQuiz ? (
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "#1e293b" }}>
+                  <div
+                    className="h-2 rounded-full transition-all duration-300"
+                    style={{
+                      width: `${pct}%`,
+                      background: allDone ? "#4ade80" : "#38bdf8",
+                    }}
+                  />
+                </div>
+                <span
+                  className="text-sm font-medium flex-shrink-0 tabular-nums"
+                  style={{ color: allDone ? "#4ade80" : "#cbd5e1" }}
+                >
+                  {correctCount}/{total}
+                </span>
               </div>
-              <span
-                className="text-sm font-medium flex-shrink-0 tabular-nums"
-                style={{ color: allDone ? "#4ade80" : "#cbd5e1" }}
-              >
-                {correctCount}/{total}
+            ) : (
+              <span className="text-sm font-medium tabular-nums" style={{ color: "#cbd5e1" }}>
+                Saved progress: {totalCorrect} correct · {totalWrong} wrong
               </span>
-            </div>
+            )}
           </div>
 
           <button
@@ -277,15 +371,41 @@ export default function KanaPractice() {
         {/* Title */}
         <div className="text-center mb-6">
           <h1 className="text-3xl font-bold mb-1" style={{ color: "#7dd3fc", fontFamily: "serif" }}>
-            仮名練習
+              {mode === "memorise" ? "仮名練習（记忆表）" : "仮名練習（テスト）"}
           </h1>
           <p className="text-xs" style={{ color: "#94a3b8" }}>
-            全ての仮名を入力してください · Type the romaji for each kana
+              {mode === "memorise"
+                ? "看熟每个假名（不要抄答案）"
+                : "在 Practice 区输入 romaji，实时显示正误"}
           </p>
           <p className="text-xs mt-1" style={{ color: "#64748b" }}>
-            Correct {Object.values(stats).reduce((sum, s) => sum + s.correct, 0)} · Wrong{" "}
-            {Object.values(stats).reduce((sum, s) => sum + s.wrong, 0)}
+              Correct {totalCorrect} · Wrong {totalWrong}
           </p>
+        </div>
+
+        <div className="flex justify-center gap-2 mb-5">
+          <Link
+            href="/practice"
+            className="px-4 py-1.5 rounded-lg text-xs font-medium border"
+            style={{
+              background: !isQuiz ? "#38bdf8" : "#111827",
+              color: !isQuiz ? "#020617" : "#a5b4fc",
+              borderColor: !isQuiz ? "#38bdf8" : "#334155",
+            }}
+          >
+            Memorise
+          </Link>
+          <Link
+            href="/practice/quiz"
+            className="px-4 py-1.5 rounded-lg text-xs font-medium border"
+            style={{
+              background: isQuiz ? "#38bdf8" : "#111827",
+              color: isQuiz ? "#020617" : "#a5b4fc",
+              borderColor: isQuiz ? "#38bdf8" : "#334155",
+            }}
+          >
+            Quiz
+          </Link>
         </div>
 
         {/* Tabs */}
@@ -308,7 +428,7 @@ export default function KanaPractice() {
         </div>
 
         {/* Options row */}
-        <div className="flex items-center justify-between mb-4 gap-2">
+        <div className="flex flex-wrap items-center justify-between mb-4 gap-2">
           <button
             onClick={handleClearAllProgress}
             className="text-xs px-3 py-1.5 rounded-lg border"
@@ -316,54 +436,84 @@ export default function KanaPractice() {
           >
             清空所有进度
           </button>
-          <label
-            className="flex items-center gap-2 text-xs cursor-pointer select-none"
-            style={{ color: "#94a3b8" }}
-          >
-            <input
-              type="checkbox"
-              checked={showOrigin}
-              onChange={e => setShowOrigin(e.target.checked)}
-              className="accent-amber-500"
-            />
-            显示汉字起源
-          </label>
+
+          <div className="flex items-center gap-4">
+            {!isQuiz && (
+              <label className="flex items-center gap-2 text-xs cursor-pointer select-none" style={{ color: "#94a3b8" }}>
+                <input
+                  type="checkbox"
+                  checked={showOrigin}
+                  onChange={(e) => setShowOrigin(e.target.checked)}
+                  className="accent-amber-500"
+                />
+                显示汉字起源
+              </label>
+            )}
+
+            <label className="flex items-center gap-2 text-xs cursor-pointer select-none" style={{ color: "#94a3b8" }}>
+              <input
+                type="checkbox"
+                checked={hideVoiced}
+                onChange={(e) => setHideVoiced(e.target.checked)}
+              />
+              隐藏浊音
+            </label>
+          </div>
         </div>
 
-        {/* Grid */}
-        <KanaGrid
-          rows={rows}
-          inputs={inputs}
-          showOrigin={showOrigin}
-          onChange={handleInput}
-        />
+        {mode === "memorise" ? (
+          <div className="mb-10">
+            <div className="mb-3 text-sm font-semibold" style={{ color: "#cbd5e1" }}>
+              Memorise（记忆表）
+            </div>
+            <KanaMemoriseGrid rows={rows} showOrigin={showOrigin} />
 
-        {/* Completion banner */}
-        {allDone && (
-          <div
-            className="mt-8 text-center py-8 rounded-2xl"
-            style={{ background: "#061408", border: "1px solid #14532d" }}
-          >
-            <div className="text-5xl mb-3">🎉</div>
-            <div className="text-2xl font-bold mb-2" style={{ color: "#4ade80", fontFamily: "serif" }}>
-              全問正解！
+            <div className="mt-8 flex justify-center">
+              <Link
+                href="/practice/quiz"
+                className="text-sm font-semibold rounded-full px-5 py-2.5"
+                style={{ background: "#38bdf8", color: "#020617" }}
+              >
+                开始 Quiz →
+              </Link>
             </div>
-            <div className="text-sm mb-5" style={{ color: "#16a34a" }}>
-              {tab === "hiragana" ? "平仮名" : "片仮名"}を全てマスターしました
+          </div>
+        ) : (
+          <div>
+            <div className="mb-3 text-sm font-semibold" style={{ color: "#cbd5e1" }}>
+              Practice（测试区）
             </div>
-            <button
-              onClick={handleReset}
-              className="px-6 py-2 rounded-lg text-sm font-medium"
-              style={{ background: "#4ade80", color: "#061408" }}
-            >
-              もう一度
-            </button>
+
+            <KanaGrid rows={rows} inputs={inputs} showOrigin={false} onChange={handleInput} />
+
+            {/* Completion banner */}
+            {allDone && (
+              <div
+                className="mt-8 text-center py-8 rounded-2xl"
+                style={{ background: "#061408", border: "1px solid #14532d" }}
+              >
+                <div className="text-5xl mb-3">🎉</div>
+                <div className="text-2xl font-bold mb-2" style={{ color: "#4ade80", fontFamily: "serif" }}>
+                  全問正解！
+                </div>
+                <div className="text-sm mb-5" style={{ color: "#16a34a" }}>
+                  {tab === "hiragana" ? "平仮名" : "片仮名"}を全てマスターしました
+                </div>
+                <button
+                  onClick={handleReset}
+                  className="px-6 py-2 rounded-lg text-sm font-medium"
+                  style={{ background: "#4ade80", color: "#061408" }}
+                >
+                  もう一度
+                </button>
+              </div>
+            )}
+
+            <p className="text-center mt-8 text-xs" style={{ color: "#64748b" }}>
+              点击每个输入框，输入 romaji，实时显示正误
+            </p>
           </div>
         )}
-
-        <p className="text-center mt-8 text-xs" style={{ color: "#64748b" }}>
-          点击每个输入框，输入罗马音，实时显示正误
-        </p>
       </div>
     </div>
   )
