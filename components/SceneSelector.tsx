@@ -99,6 +99,39 @@ export default function SceneSelector({ scenarios }: { scenarios: Scenario[] }) 
           </div>
         </Link>
 
+        {/* RAG demo card */}
+        <Link href="/rag">
+          <div
+            className="rounded-xl border p-6 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-xl"
+            style={{
+              background: "#0c1018",
+              borderColor: "#1e3a5f",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+            }}
+          >
+            <div className="text-5xl mb-4 text-center">🔍</div>
+            <div className="text-center mb-3">
+              <span className="text-xl font-bold" style={{ color: "#60a5fa", fontFamily: "serif" }}>
+                RAG Demo
+              </span>
+              <span className="ml-2 text-sm" style={{ color: "#3b5a80" }}>
+                知识库问答
+              </span>
+            </div>
+            <p className="text-sm text-center mb-4" style={{ color: "#6b8299" }}>
+              检索增强生成 · 带引用来源的 AI 问答
+            </p>
+            <div className="flex items-center justify-end">
+              <span
+                className="text-xs px-2 py-0.5 rounded border"
+                style={{ background: "rgba(30,58,95,0.5)", color: "#60a5fa", borderColor: "#1e3a5f" }}
+              >
+                RAG
+              </span>
+            </div>
+          </div>
+        </Link>
+
         {/* Kana practice card */}
         <Link href="/practice">
           <div
