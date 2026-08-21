@@ -1,4 +1,5 @@
 import OpenAI from "openai"
+import { CHAT_MODEL, GROQ_BASE_URL, REASONING_EFFORT, tokenBudget } from "@/lib/model"
 import type { Message } from "@/lib/types"
 import { getScenario } from "@/lib/scenarios"
 
@@ -19,7 +20,7 @@ function buildQuestionPrompt(scenarioContext: string) {
 export async function POST(request: Request) {
   const client = new OpenAI({
     apiKey: process.env.GROQ_API_KEY,
-    baseURL: "https://api.groq.com/openai/v1",
+    baseURL: GROQ_BASE_URL,
   })
 
   const { characterLine, dialogMessages, isDirectQuestion, question, scenarioId } =
@@ -43,8 +44,9 @@ export async function POST(request: Request) {
       try {
         if (isDirectQuestion && question) {
           const response = await client.chat.completions.create({
-            model: "llama-3.3-70b-versatile",
-            max_tokens: 512,
+            model: CHAT_MODEL,
+          reasoning_effort: REASONING_EFFORT,
+            max_tokens: tokenBudget(512),
             messages: [
               { role: "system", content: buildQuestionPrompt(scenarioContext) },
               { role: "user", content: question },
@@ -65,8 +67,9 @@ export async function POST(request: Request) {
           const userMessage = `对话背景：\n${recentContext}\n\n日本角色刚说：「${characterLine}」\n\n请分析这句话。`
 
           const response = await client.chat.completions.create({
-            model: "llama-3.3-70b-versatile",
-            max_tokens: 512,
+            model: CHAT_MODEL,
+          reasoning_effort: REASONING_EFFORT,
+            max_tokens: tokenBudget(512),
             messages: [
               { role: "system", content: buildCoachPrompt(scenarioContext) },
               { role: "user", content: userMessage },

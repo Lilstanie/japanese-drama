@@ -1,4 +1,5 @@
 import OpenAI from "openai"
+import { CHAT_MODEL, GROQ_BASE_URL, REASONING_EFFORT, tokenBudget } from "@/lib/model"
 import { formatChunksForPrompt, retrieve } from "@/lib/rag/index"
 import type { RetrievedChunk } from "@/lib/rag/types"
 
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
 
   const client = new OpenAI({
     apiKey: process.env.GROQ_API_KEY,
-    baseURL: "https://api.groq.com/openai/v1",
+    baseURL: GROQ_BASE_URL,
   })
 
   const encoder = new TextEncoder()
@@ -51,8 +52,9 @@ export async function POST(request: Request) {
     async start(controller) {
       try {
         const response = await client.chat.completions.create({
-          model: "llama-3.3-70b-versatile",
-          max_tokens: 768,
+          model: CHAT_MODEL,
+          reasoning_effort: REASONING_EFFORT,
+          max_tokens: tokenBudget(768),
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: userMessage },

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
-import { parseRuby } from "@/lib/furigana"
+import JapaneseText from "@/components/JapaneseText"
 import type { PodcastLine } from "./PodcastPlayer"
 
 interface Props {
@@ -76,7 +76,7 @@ export default function PodcastTranscript({ transcript, isGenerating, currentSpe
               }
             >
               {line.speaker === "A" ? (
-                <span dangerouslySetInnerHTML={{ __html: parseRuby(line.content) }} />
+                <JapaneseText text={line.content} />
               ) : (
                 <span>{line.content}</span>
               )}

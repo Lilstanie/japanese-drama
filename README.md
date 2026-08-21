@@ -3,6 +3,7 @@
 Immersive Japanese learning app with:
 
 - Scene-based roleplay chat with Japanese character AI
+- **Katakana loanword annotation** — the English (or German/French/...) source word rendered above katakana, like furigana for 外来語
 - Chinese coach analysis/support panel
 - Bilingual podcast auto-conversation mode with TTS
 - Kana (hiragana/katakana) practice grid
@@ -28,6 +29,9 @@ npm install
 
 ```bash
 GROQ_API_KEY=your_groq_key
+
+# Optional — override the chat model (see docs/SETUP_AND_RUNBOOK.md)
+GROQ_MODEL=openai/gpt-oss-120b
 
 # Optional (podcast AI voice)
 ELEVENLABS_API_KEY=your_elevenlabs_key
@@ -62,6 +66,13 @@ Open `http://localhost:3000`.
 - `/api/rag/retrieve` TF-IDF chunk retrieval
 - `/api/rag/generate` grounded answer streaming (Groq)
 - `/api/rag/stats` corpus / index stats
+- `/api/katakana/gloss` katakana loanword → source word lookup
+
+## Katakana Annotation
+
+Source words above katakana loanwords, as a second annotation layer alongside
+furigana. See [`docs/KATAKANA_ANNOTATION.md`](docs/KATAKANA_ANNOTATION.md) for the
+rendering approach, segmentation rules, and how to extend the dictionary.
 
 ## RAG Demo (interview)
 

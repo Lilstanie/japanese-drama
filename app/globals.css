@@ -36,6 +36,59 @@ ruby rt {
   line-height: 2.4;
 }
 
+/*
+ * Katakana loanword annotation — English source word above the katakana.
+ *
+ * Not <ruby>: ruby text does not reserve layout width, so a long source word
+ * ("convenience store") over short katakana (コンビニ) overhangs and collides
+ * with the neighbouring text. This inline-block reserves the width of whichever
+ * line is wider and centres both, so annotations can never overlap.
+ *
+ * Alignment: an inline-block's baseline is the baseline of its last line box —
+ * .kt-ja — so the katakana sits exactly on the surrounding text's baseline,
+ * with the gloss floating above it just like a ruby reading.
+ */
+.kt {
+  display: inline-block;
+  vertical-align: baseline;
+  text-align: center;
+  line-height: 1;
+  margin: 0 0.1em;
+}
+
+.kt-en {
+  display: block;
+  /* nowrap is what forces the box to reserve the full gloss width */
+  white-space: nowrap;
+  font-family: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 0.5em;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  /* Teal, so a source word is never mistaken for an amber furigana reading */
+  color: #5eead4;
+}
+
+.kt-ja {
+  display: block;
+  line-height: 1.4;
+}
+
+/* Marks the exact span of the katakana word inside a wider annotation box. */
+.kt-mark {
+  border-bottom: 1px dotted rgba(94, 234, 212, 0.4);
+  padding-bottom: 1px;
+}
+
+/* The coach panel reads on a blue ground; teal-on-blue loses contrast there. */
+.coach-text .kt-en {
+  color: #7dd3fc;
+}
+
+.coach-text .kt-mark {
+  border-bottom-color: rgba(125, 211, 252, 0.4);
+}
+
 ::-webkit-scrollbar {
   width: 4px;
 }

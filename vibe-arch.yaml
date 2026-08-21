@@ -1,0 +1,185 @@
+blocks:
+  scenarios:
+    label: Character Scenarios
+    intent: >-
+      Identity layer: name / role / description / opening line for each AI character; source of
+      truth for all scene configurations
+    paths:
+      - lib/scenarios.ts
+      - lib/types.ts
+      - hidden/extra-scenarios.ts
+    depends_on: []
+  prompt_overrides:
+    label: Prompt Overrides
+    intent: >-
+      Hidden per-scenario system prompt injections that augment or replace default character
+      behaviour
+    paths:
+      - hidden/prompt-overrides.ts
+    depends_on:
+      - scenarios
+    status: wip
+  chat_api:
+    label: Chat API
+    intent: >-
+      Streaming Japanese character response endpoint; merges scenario identity with optional prompt
+      overrides
+    paths:
+      - app/api/chat/**
+    depends_on:
+      - scenarios
+      - prompt_overrides
+      - model_config
+    status: done
+  coach_api:
+    label: Coach API
+    intent: >-
+      Streaming Chinese-language coach endpoint; provides real-time translation and grammar
+      explanation separate from the character turn
+    paths:
+      - app/api/coach/**
+    depends_on:
+      - scenarios
+      - model_config
+  dialog_ui:
+    label: Dialog UI
+    intent: >-
+      Client-side scene shell: message threading, Web Speech TTS voice selection, furigana
+      rendering, romaji toggle, input bar
+    paths:
+      - app/scene/[id]/**
+      - components/DialogPanel.tsx
+      - components/InputBar.tsx
+      - components/SceneSelector.tsx
+      - app/page.tsx
+      - app/layout.tsx
+    depends_on:
+      - scenarios
+      - chat_api
+      - coach_api
+      - japanese_text
+      - persistence
+    status: done
+  coach_ui:
+    label: Coach Panel UI
+    intent: Scrolling coach message panel with furigana rendering; rendered alongside the dialog panel
+    paths:
+      - components/CoachPanel.tsx
+    depends_on:
+      - coach_api
+      - japanese_text
+    status: done
+  japanese_text:
+    label: Japanese Text Processing
+    intent: >-
+      Single-pass segmentation of Japanese text into both annotation layers (furigana readings over
+      kanji, source words over katakana loanwords) plus kana table data and romaji conversion;
+      shared utility layer for all UI and quiz features
+    paths:
+      - lib/furigana.ts
+      - lib/japanese-text.ts
+      - lib/kana.ts
+      - lib/romaji.ts
+      - components/JapaneseText.tsx
+    depends_on:
+      - katakana_gloss
+    status: done
+  katakana_gloss:
+    label: Katakana Loanword Glossing
+    intent: >-
+      Resolves the foreign source word behind a katakana term: static loanword dictionary plus
+      full-cover run segmentation, an on-demand model lookup for terms the dictionary misses, and
+      the client-side cache and show/hide toggle that drive rendering
+    paths:
+      - lib/katakana.ts
+      - lib/katakana-dict.ts
+      - app/api/katakana/**
+      - components/AnnotationProvider.tsx
+      - components/KatakanaToggle.tsx
+    depends_on:
+      - model_config
+    status: done
+  model_config:
+    label: Shared Model Config
+    intent: >-
+      Single source of truth for the Groq chat model id, reasoning-token budget and base URL, so a
+      provider decommissioning a model cannot silently break individual routes
+    paths:
+      - lib/model.ts
+    depends_on: []
+    status: done
+  kana_practice:
+    label: Kana Practice & Quiz
+    intent: Interactive hiragana/katakana drill UI and quiz routing
+    paths:
+      - components/KanaPractice.tsx
+      - app/practice/page.tsx
+      - app/practice/quiz/**
+    depends_on:
+      - japanese_text
+    status: planned
+  podcast:
+    label: Podcast Feature
+    intent: >-
+      Dual-speaker podcast generation, ElevenLabs TTS proxy, prefetch orchestration, player controls
+      and transcript display
+    paths:
+      - app/api/podcast/**
+      - app/podcast/page.tsx
+      - components/PodcastPlayer.tsx
+      - components/PodcastControls.tsx
+      - components/PodcastTranscript.tsx
+      - lib/podcast-topics.ts
+      - lib/tts.ts
+    depends_on:
+      - scenarios
+    status: planned
+  rag_core:
+    label: RAG Core
+    intent: >-
+      Corpus loading, text chunking, TF-IDF index build and retrieval; pure library with no HTTP
+      concerns
+    paths:
+      - lib/rag/chunk.ts
+      - lib/rag/corpus.ts
+      - lib/rag/index.ts
+      - lib/rag/tfidf.ts
+      - lib/rag/types.ts
+    depends_on: []
+    status: done
+  rag_api:
+    label: RAG API
+    intent: HTTP endpoints splitting retrieve and generate phases over the RAG core
+    paths:
+      - app/api/rag/**
+    depends_on:
+      - rag_core
+      - model_config
+    status: wip
+  rag_ui:
+    label: RAG Demo UI
+    intent: Browser-facing RAG demo panel and its Next.js page entry
+    paths:
+      - app/rag/page.tsx
+      - components/RagDemo.tsx
+    depends_on:
+      - rag_api
+  persistence:
+    label: Client Persistence
+    intent: Local storage helpers for saving and restoring conversation history across sessions
+    paths:
+      - lib/persistence.ts
+    depends_on: []
+  infra_config:
+    label: Infrastructure & Config
+    intent: Next.js, TypeScript, Tailwind and PostCSS configuration; no runtime logic
+    paths:
+      - next.config.ts
+      - next-env.d.ts
+      - postcss.config.mjs
+      - package.json
+    depends_on: []
+unassigned:
+  - docs/**
+  - claude files /**
+  - vibe-arch.yaml

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react"
 import type { Message } from "@/lib/types"
-import FuriganaText from "@/components/FuriganaText"
+import JapaneseText from "@/components/JapaneseText"
 
 export default function CoachPanel({
   messages,
@@ -38,27 +38,27 @@ export default function CoachPanel({
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className="rounded-xl px-4 py-3 text-sm whitespace-pre-wrap ruby-text"
+            className="rounded-xl px-4 py-3 text-sm whitespace-pre-wrap ruby-text coach-text"
             style={{
               background: "#111d2e",
               color: "#c8dcf0",
               border: "1px solid #1e3050",
             }}
           >
-            <FuriganaText text={msg.content} rtColor="#60a5fa" />
+            <JapaneseText text={msg.content} rtColor="#60a5fa" />
           </div>
         ))}
 
         {isStreaming && streamingText && (
           <div
-            className="rounded-xl px-4 py-3 text-sm whitespace-pre-wrap ruby-text"
+            className="rounded-xl px-4 py-3 text-sm whitespace-pre-wrap ruby-text coach-text"
             style={{
               background: "#111d2e",
               color: "#c8dcf0",
               border: "1px solid #1e3050",
             }}
           >
-            <FuriganaText text={streamingText} rtColor="#60a5fa" />
+            <JapaneseText text={streamingText} rtColor="#60a5fa" isStreaming />
             <span
               className="inline-block w-1.5 h-3.5 ml-0.5 animate-pulse rounded-sm"
               style={{ background: "#60a5fa", verticalAlign: "text-bottom" }}
