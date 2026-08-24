@@ -36,10 +36,16 @@ AI_BASE_URL=https://api.groq.com/openai/v1
 AI_API_KEY=your_key
 AI_MODEL=openai/gpt-oss-120b
 
-# Optional (podcast AI voice)
+# Optional (podcast AI voice) — see docs/SETUP_AND_RUNBOOK.md §8
+TTS_PROVIDER=elevenlabs           # or: camb
 ELEVENLABS_API_KEY=your_elevenlabs_key
 ELEVENLABS_VOICE_KENJI=optional_voice_id
 ELEVENLABS_VOICE_WEI=optional_voice_id
+
+# Camb AI — Japanese-native voices (slower than ElevenLabs)
+CAMB_API_KEY=your_camb_key
+CAMB_VOICE_KENJI=171037
+CAMB_VOICE_WEI=171145
 
 # Optional scenario extensions
 EXTRA_SCENARIOS_JSON=[]

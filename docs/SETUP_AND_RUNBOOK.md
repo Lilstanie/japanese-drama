@@ -233,20 +233,47 @@ over editing code so a swap stays a config change.
 
 ## 8) Voice / TTS Options
 
-Podcast voice is ElevenLabs by default, with a Web Speech API fallback
-(`lib/tts.ts`).
+Provider is chosen by `TTS_PROVIDER`, or auto-detected from whichever key is
+present (ElevenLabs preferred for latency). The client just plays whatever bytes
+`/api/podcast/tts` returns, so providers differ only inside that route.
+
+| Var | Purpose |
+|-----|---------|
+| `TTS_PROVIDER` | `elevenlabs` (default) or `camb` |
+| `CAMB_API_KEY` | Camb AI key |
+| `CAMB_VOICE_KENJI` / `CAMB_VOICE_WEI` | Numeric voice ids (default 171037 ja / 171145 zh) |
+
+`GET /api/podcast/tts/ping` checks whichever provider is active and reports how
+many voices the key can reach.
+
+### Camb AI (measured)
+
+Verified working for both speakers: Japanese `ja-jp` and Mandarin `zh-cn`,
+returning 48 kHz mono 16-bit WAV that decodes cleanly in-browser.
+
+- **18 Japanese voices** (language code 88), male and female — genuinely
+  native-sounding, unlike a multilingual voice speaking Japanese.
+- **Latency 2–6s warm, ~86s on a cold start.** ElevenLabs is ~1s.
+- **Text must be 3–3000 characters.** Below 3 the API returns a JSON validation
+  error instead of audio, so the route pads very short lines (`はい` → `はい。`)
+  and truncates at 3000.
+- The WAV declares `0xFFFFFFFF` for its RIFF and data chunk sizes (streaming
+  WAV, unknown length). Browsers decode it fine — no header repair needed.
+
+**Latency caveat:** `PodcastPlayer` prefetches the next *text* line in parallel
+with speaking, but the *audio* fetch happens inline in `speakLine`. With
+ElevenLabs (~1s) that is barely noticeable; with Camb it becomes a 2–6s silence
+before every line. Prefetching audio alongside the text would fix it, and is the
+main thing standing between Camb and a smooth podcast.
+
+### Other free options
 
 Two dead ends worth recording: **LLM aggregators such as OpenRouter serve no TTS
 at all**, and Groq's TTS models (`canopylabs/orpheus-*`) are English and Arabic
-only — neither can voice this app's Japanese lines.
-
-Free options that do support Japanese:
+only — neither can voice this app's Japanese.
 
 | Option | Key needed | Notes |
 |--------|-----------|-------|
-| Web Speech API | none | Already the built-in fallback; quality depends on the OS voices installed |
-| Microsoft Edge TTS | none | Neural voices incl. `ja-JP-NanamiNeural` / `ja-JP-KeitaNeural`, via the `msedge-tts` npm package. Unofficial protocol — treat as best-effort |
-| VOICEVOX | none | Japanese-only engine, self-hosted via Docker (`voicevox/voicevox_engine`); `POST /audio_query` then `POST /synthesis`. Commercial use allowed with credit |
-
-VOICEVOX needs a running container, so it suits local or self-hosted deployment
-rather than serverless.
+| Web Speech API | none | Built-in fallback; quality depends on installed OS voices |
+| Microsoft Edge TTS | none | Neural voices incl. `ja-JP-NanamiNeural` / `ja-JP-KeitaNeural`, via the `msedge-tts` npm package. Unofficial protocol — best-effort |
+| VOICEVOX | none | Japanese-only engine, self-hosted via Docker (`voicevox/voicevox_engine`); `POST /audio_query` then `POST /synthesis`. Commercial use allowed with credit. Needs a container, so not serverless-friendly |

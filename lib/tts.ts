@@ -18,7 +18,7 @@ function detectLang(text: string): "ja" | "zh" {
   return /[ぁ-ゖァ-ヺ]/.test(text) ? "ja" : "zh"
 }
 
-// ── ElevenLabs path ────────────────────────────────────────────────────────
+// ── AI provider path (ElevenLabs / Camb AI, chosen server-side) ────────────
 
 async function speakAI(
   text: string,
@@ -35,7 +35,7 @@ async function speakAI(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, speaker, lang }),
   })
-  if (!res.ok) throw new Error(`ElevenLabs ${res.status}`)
+  if (!res.ok) throw new Error(`TTS ${res.status}`)
 
   // cancelSpeech() may have been called during the fetch — bail out silently
   if (speakGen !== myGen) return
