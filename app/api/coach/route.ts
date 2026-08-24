@@ -1,4 +1,4 @@
-import { chatParams, createAIClient } from "@/lib/model"
+import { chatParams, createAIClient, friendlyAIError } from "@/lib/model"
 import type { Message } from "@/lib/types"
 import { getScenario } from "@/lib/scenarios"
 
@@ -75,8 +75,7 @@ export async function POST(request: Request) {
           }
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Unknown error"
-        controller.enqueue(encoder.encode(`[错误: ${msg}]`))
+        controller.enqueue(encoder.encode(friendlyAIError(err, "coach")))
       } finally {
         controller.close()
       }

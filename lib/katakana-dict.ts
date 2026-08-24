@@ -333,6 +333,12 @@ export const NON_LOANWORDS = new Set([
   "ベタベタ", "ザラザラ", "ツルツル", "モチモチ", "サクサク", "パリパリ",
   "ジュージュー", "グツグツ", "ゴクゴク", "パクパク", "モグモグ",
   "スースー", "ヒヤヒヤ", "ドンドン", "バンバン", "ガンガン", "シーン",
+  // Kana-chart rows. A learning app prints these constantly ("カタカナはアイウエオ
+  // …"), and they are sequences of syllables rather than words, so they must
+  // never be glossed or sent to the model.
+  "アイウエオ", "カキクケコ", "サシスセソ", "タチツテト", "ナニヌネノ",
+  "ハヒフヘホ", "マミムメモ", "ヤユヨ", "ラリルレロ", "ワヲン",
+  "ガギグゲゴ", "ザジズゼゾ", "ダヂヅデド", "バビブベボ", "パピプペポ",
   // Native words commonly written in katakana
   "コツ", "ウソ", "ダメ", "スゴイ", "ヤバイ", "オレ", "ボク", "アナタ",
   "コブ", "ヒザ", "コシ", "アシ", "テ", "メ", "クチ", "アタマ", "カラダ",

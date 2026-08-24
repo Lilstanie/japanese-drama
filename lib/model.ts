@@ -81,3 +81,35 @@ export function chatParams(visibleTokens: number) {
 export function createAIClient(): OpenAI {
   return new OpenAI({ apiKey: AI_API_KEY, baseURL: AI_BASE_URL })
 }
+
+/**
+ * Turn a provider error into something safe to show a learner mid-conversation.
+ *
+ * Raw SDK messages leaked straight into the dialogue as `[错误: 429 Provider
+ * returned error]`, which reads like the character malfunctioning. Rate limits
+ * are routine on free tiers, so they get their own wording and are logged
+ * rather than surfaced verbatim.
+ */
+export function friendlyAIError(err: unknown, context: string): string {
+  const status =
+    typeof err === "object" && err !== null && "status" in err
+      ? (err as { status?: number }).status
+      : undefined
+  const raw = err instanceof Error ? err.message : String(err)
+
+  console.error(`[${context}] provider error (status=${status ?? "?"}):`, raw)
+
+  if (status === 429) {
+    return "（AI 服务达到频率限制，请稍等几秒再试）"
+  }
+  if (status === 401 || status === 403) {
+    return "（AI 密钥无效，请检查 .env.local 中的 AI_API_KEY）"
+  }
+  if (status === 404) {
+    return `（模型 ${CHAT_MODEL} 不可用，可能已下线；见 runbook §7）`
+  }
+  if (status && status >= 500) {
+    return "（AI 服务暂时不可用，请稍后再试）"
+  }
+  return "（AI 请求失败，请重试）"
+}

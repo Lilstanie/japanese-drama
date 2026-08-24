@@ -136,6 +136,20 @@ Routes call `tokenBudget(n)` from `lib/model.ts`, which adds reasoning headroom
 on top of the visible-token estimate. Raise `REASONING_HEADROOM` there if a new
 model needs more.
 
+### F0) A katakana word is deliberately not annotated
+
+Only 外来語 (loanwords) get a source word. These are correct with no annotation:
+
+- **Kana-chart rows** — アイウエオ, カキクケコ … These are syllable sequences,
+  not words. Blocklisted so they never reach the model.
+- **Onomatopoeia** — ドキドキ, ワクワク
+- **Native words written in katakana** — ヤバイ, カタカナ itself
+- **Brand and place names** — ヨドバシカメラ
+
+If a sentence is entirely made of these, nothing lights up. That is the feature
+working, not failing. Compare against a known loanword (コンビニ, サンドイッチ)
+to tell the difference quickly.
+
 ### F) Katakana shows no English source word
 
 - Confirm the **ABC** toggle in the header is on.
@@ -230,6 +244,16 @@ AI_MODEL=stealth/ox-alpha
 Free-tier rosters churn, and OpenRouter's `stealth/*` ids are anonymised preview
 models that get renamed or pulled without notice. Prefer changing `AI_MODEL`
 over editing code so a swap stays a config change.
+
+**Measured on OpenRouter free tier (`stealth/ox-alpha`):** of five rapid
+sequential chat calls, one returned empty, two succeeded, and one hung past 60s;
+sustained use returned `429`. Fine for trying a model, not for actually using
+the app. Groq's `openai/gpt-oss-120b` handled the same five calls without error,
+which is why it remains the default.
+
+Provider errors no longer leak into the dialogue. `friendlyAIError()` maps
+status codes to a readable note (rate limit, bad key, retired model) and logs
+the raw error server-side.
 
 ## 8) Voice / TTS Options
 

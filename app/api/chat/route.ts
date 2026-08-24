@@ -1,4 +1,4 @@
-import { chatParams, createAIClient } from "@/lib/model"
+import { chatParams, createAIClient, friendlyAIError } from "@/lib/model"
 import { getScenario } from "@/lib/scenarios"
 import type { Message } from "@/lib/types"
 
@@ -55,8 +55,7 @@ Current scenario: ${scenario.description}${loadExtraPrompt(scenario.id)}`
           if (text) controller.enqueue(encoder.encode(text))
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Unknown error"
-        controller.enqueue(encoder.encode(`[错误: ${msg}]`))
+        controller.enqueue(encoder.encode(friendlyAIError(err, "chat")))
       } finally {
         controller.close()
       }

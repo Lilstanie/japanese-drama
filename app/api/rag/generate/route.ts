@@ -1,4 +1,4 @@
-import { chatParams, createAIClient } from "@/lib/model"
+import { chatParams, createAIClient, friendlyAIError } from "@/lib/model"
 import { formatChunksForPrompt, retrieve } from "@/lib/rag/index"
 import type { RetrievedChunk } from "@/lib/rag/types"
 
@@ -61,8 +61,7 @@ export async function POST(request: Request) {
           if (text) controller.enqueue(encoder.encode(text))
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Unknown error"
-        controller.enqueue(encoder.encode(`[错误: ${msg}]`))
+        controller.enqueue(encoder.encode(friendlyAIError(err, "rag/generate")))
       } finally {
         controller.close()
       }
