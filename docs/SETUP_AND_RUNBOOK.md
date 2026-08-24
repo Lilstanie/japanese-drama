@@ -47,8 +47,12 @@ Required:
 
 Optional:
 
+- `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL`  
+  Point the app at any OpenAI-compatible provider (see §7). Defaults to Groq.
+- `AI_REASONING_EFFORT`  
+  `low` (default), `medium`, `high`, or `off` for models that reject the parameter.
 - `GROQ_MODEL`  
-  Overrides the chat model id. Defaults to `openai/gpt-oss-120b` (see §7).
+  Legacy alias for `AI_MODEL`.
 - `ELEVENLABS_API_KEY`  
   Enables AI voice in podcast mode.
 - `ELEVENLABS_VOICE_KENJI`  
@@ -168,14 +172,81 @@ model needs more.
   - kana romaji validation
   - katakana run segmentation (full-cover vs greedy)
 
-## 7) Model Configuration
+## 7) Model & Provider Configuration
 
-All Groq-backed routes read their model from `lib/model.ts`:
+Every AI route builds its client with `createAIClient()` and spreads
+`chatParams(n)` from `lib/model.ts`. Nothing else names a provider, so switching
+is env-only:
 
-- `CHAT_MODEL` — `GROQ_MODEL` env override, else `openai/gpt-oss-120b`
-- `REASONING_EFFORT` — `"low"`, keeps reasoning-token spend down
-- `tokenBudget(n)` — visible tokens plus `REASONING_HEADROOM`
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `AI_BASE_URL` | `https://api.groq.com/openai/v1` | Any OpenAI-compatible endpoint |
+| `AI_API_KEY` | falls back to `GROQ_API_KEY` | Provider key |
+| `AI_MODEL` | `openai/gpt-oss-120b` | Model id (`GROQ_MODEL` also accepted) |
+| `AI_REASONING_EFFORT` | `low` | `off` for models that reject the parameter |
 
-It is centralised deliberately: the previous id `llama-3.3-70b-versatile` was
-retired by Groq while duplicated across five route handlers, which broke chat,
-coach, podcast and RAG generation simultaneously and silently.
+Centralised deliberately: the previous id `llama-3.3-70b-versatile` was retired
+by Groq while duplicated across five route handlers, which broke chat, coach,
+podcast and RAG generation simultaneously and silently.
+
+### Reasoning parameter differs by provider
+
+Both speak the OpenAI wire format, but not for reasoning budget:
+
+- Groq / OpenAI — `reasoning_effort: "low"`
+- OpenRouter — `reasoning: { effort: "low" }`; it does **not** read
+  `reasoning_effort`, so a model that reasons by default would spend the whole
+  budget thinking and return nothing.
+
+`chatParams()` picks the right shape from `AI_BASE_URL`. A new provider with a
+third convention needs a branch there and nowhere else.
+
+### Tested free options
+
+Measured on this app's own workloads — Japanese roleplay with furigana, and the
+JSON-mode katakana gloss.
+
+| Model | Chat | Gloss (JSON) | Notes |
+|-------|------|--------------|-------|
+| `openai/gpt-oss-120b` (default) | good, ~0.9s | reliable | Best overall |
+| `openai/gpt-oss-20b` | good, ~0.45s | **unreliable** | 2× faster, but garbles katakana keys and intermittently fails JSON mode |
+| `qwen/qwen3.6-27b` | — | fails | `json_validate_failed` |
+| `groq/compound-mini` | needs `AI_REASONING_EFFORT=off` | works | Rejects `reasoning_effort` |
+
+`gpt-oss-20b` is reasonable for chat-only use, but keep the gloss route on a
+stronger model — a weak model returning a garbled key leaves the term
+unannotated (see §F).
+
+### Other providers
+
+Anything OpenAI-compatible works. OpenRouter, for example:
+
+```bash
+AI_BASE_URL=https://openrouter.ai/api/v1
+AI_API_KEY=sk-or-...
+AI_MODEL=stealth/ox-alpha
+```
+
+Free-tier rosters churn, and OpenRouter's `stealth/*` ids are anonymised preview
+models that get renamed or pulled without notice. Prefer changing `AI_MODEL`
+over editing code so a swap stays a config change.
+
+## 8) Voice / TTS Options
+
+Podcast voice is ElevenLabs by default, with a Web Speech API fallback
+(`lib/tts.ts`).
+
+Two dead ends worth recording: **LLM aggregators such as OpenRouter serve no TTS
+at all**, and Groq's TTS models (`canopylabs/orpheus-*`) are English and Arabic
+only — neither can voice this app's Japanese lines.
+
+Free options that do support Japanese:
+
+| Option | Key needed | Notes |
+|--------|-----------|-------|
+| Web Speech API | none | Already the built-in fallback; quality depends on the OS voices installed |
+| Microsoft Edge TTS | none | Neural voices incl. `ja-JP-NanamiNeural` / `ja-JP-KeitaNeural`, via the `msedge-tts` npm package. Unofficial protocol — treat as best-effort |
+| VOICEVOX | none | Japanese-only engine, self-hosted via Docker (`voicevox/voicevox_engine`); `POST /audio_query` then `POST /synthesis`. Commercial use allowed with credit |
+
+VOICEVOX needs a running container, so it suits local or self-hosted deployment
+rather than serverless.

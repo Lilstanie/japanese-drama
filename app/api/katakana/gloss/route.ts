@@ -1,5 +1,4 @@
-import OpenAI from "openai"
-import { CHAT_MODEL, GROQ_BASE_URL, REASONING_EFFORT, tokenBudget } from "@/lib/model"
+import { AI_API_KEY, CHAT_MODEL, chatParams, createAIClient } from "@/lib/model"
 import { lookupLoanword, NON_LOANWORDS } from "@/lib/katakana-dict"
 import { isKatakanaTerm } from "@/lib/katakana"
 
@@ -91,22 +90,17 @@ export async function POST(request: Request) {
     return Response.json({ glosses, source: "dictionary" as const })
   }
 
-  if (!process.env.GROQ_API_KEY) {
+  if (!AI_API_KEY) {
     // Without a key the dictionary still answers; unknown terms just stay bare.
     return Response.json({ glosses, source: "dictionary" as const })
   }
 
-  const client = new OpenAI({
-    apiKey: process.env.GROQ_API_KEY,
-    baseURL: GROQ_BASE_URL,
-  })
+  const client = createAIClient()
 
   try {
     const completion = await client.chat.completions.create({
-      model: CHAT_MODEL,
-      reasoning_effort: REASONING_EFFORT,
+      ...chatParams(512),
       temperature: 0,
-      max_tokens: tokenBudget(512),
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
@@ -118,7 +112,19 @@ export async function POST(request: Request) {
     const parsed = JSON.parse(raw) as { glosses?: Record<string, unknown> }
     const returned = parsed.glosses ?? {}
 
+    // A term the model simply did not answer is NOT evidence that it is not a
+    // loanword. Weaker models garble katakana keys — asked about ハンドクリーム,
+    // gpt-oss-20b replied about ホンドクレーマー — and caching those as null
+    // would permanently suppress a valid annotation. Only an explicit null in
+    // the response counts as "not a loanword".
+    let unanswered = 0
+
     for (const term of needsModel) {
+      if (!(term in returned)) {
+        unanswered++
+        continue
+      }
+
       const value = returned[term]
       const gloss =
         typeof value === "string" && value.trim() && value.trim().length <= 40
@@ -128,7 +134,17 @@ export async function POST(request: Request) {
       cacheGloss(term, gloss)
     }
 
-    return Response.json({ glosses, source: "model" as const })
+    if (unanswered) {
+      console.warn(
+        `[katakana/gloss] ${CHAT_MODEL} left ${unanswered}/${needsModel.length} terms unanswered`
+      )
+    }
+
+    // `partial` keeps the unanswered terms uncached so a later request retries.
+    return Response.json({
+      glosses,
+      source: unanswered ? ("partial" as const) : ("model" as const),
+    })
   } catch (err) {
     // A model failure must not break rendering — return what the dictionary knew
     // and report `partial` so the client leaves the rest unresolved and retries

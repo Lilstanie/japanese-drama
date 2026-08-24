@@ -1,13 +1,9 @@
-import OpenAI from "openai"
-import { CHAT_MODEL, GROQ_BASE_URL, REASONING_EFFORT, tokenBudget } from "@/lib/model"
+import { chatParams, createAIClient } from "@/lib/model"
 import { getScenario } from "@/lib/scenarios"
 import type { Message } from "@/lib/types"
 
 export async function POST(request: Request) {
-  const client = new OpenAI({
-    apiKey: process.env.GROQ_API_KEY,
-    baseURL: GROQ_BASE_URL,
-  })
+  const client = createAIClient()
   const { scenarioId, messages, userInput } = await request.json() as {
     scenarioId: string
     messages: Message[]
@@ -49,9 +45,7 @@ Current scenario: ${scenario.description}${loadExtraPrompt(scenario.id)}`
     async start(controller) {
       try {
         const response = await client.chat.completions.create({
-          model: CHAT_MODEL,
-          reasoning_effort: REASONING_EFFORT,
-          max_tokens: tokenBudget(512),
+          ...chatParams(512),
           messages: [{ role: "system", content: systemPrompt }, ...history],
           stream: true,
         })

@@ -1,5 +1,4 @@
-import OpenAI from "openai"
-import { CHAT_MODEL, GROQ_BASE_URL, REASONING_EFFORT, tokenBudget } from "@/lib/model"
+import { chatParams, createAIClient } from "@/lib/model"
 import { formatChunksForPrompt, retrieve } from "@/lib/rag/index"
 import type { RetrievedChunk } from "@/lib/rag/types"
 
@@ -41,10 +40,7 @@ export async function POST(request: Request) {
   const context = formatChunksForPrompt(chunks)
   const userMessage = `用户问题：${q}\n\n检索上下文（共 ${chunks.length} 段）：\n\n${context}`
 
-  const client = new OpenAI({
-    apiKey: process.env.GROQ_API_KEY,
-    baseURL: GROQ_BASE_URL,
-  })
+  const client = createAIClient()
 
   const encoder = new TextEncoder()
 
@@ -52,9 +48,7 @@ export async function POST(request: Request) {
     async start(controller) {
       try {
         const response = await client.chat.completions.create({
-          model: CHAT_MODEL,
-          reasoning_effort: REASONING_EFFORT,
-          max_tokens: tokenBudget(768),
+          ...chatParams(768),
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: userMessage },

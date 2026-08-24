@@ -30,8 +30,11 @@ npm install
 ```bash
 GROQ_API_KEY=your_groq_key
 
-# Optional — override the chat model (see docs/SETUP_AND_RUNBOOK.md)
-GROQ_MODEL=openai/gpt-oss-120b
+# Optional — swap in any OpenAI-compatible provider/model
+# (see docs/SETUP_AND_RUNBOOK.md §7)
+AI_BASE_URL=https://api.groq.com/openai/v1
+AI_API_KEY=your_key
+AI_MODEL=openai/gpt-oss-120b
 
 # Optional (podcast AI voice)
 ELEVENLABS_API_KEY=your_elevenlabs_key

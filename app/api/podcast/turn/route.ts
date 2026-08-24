@@ -1,10 +1,6 @@
-import OpenAI from "openai"
-import { CHAT_MODEL, GROQ_BASE_URL, REASONING_EFFORT, tokenBudget } from "@/lib/model"
+import { chatParams, createAIClient } from "@/lib/model"
 
-const client = new OpenAI({
-  apiKey: process.env.GROQ_API_KEY,
-  baseURL: GROQ_BASE_URL,
-})
+const client = createAIClient()
 
 const SYSTEM_A = (topic: string, difficulty: string, seed: string) =>
   `あなたはKenjiです。日本人の26歳男性で、友達のWeiと気楽に話しています。
@@ -56,9 +52,7 @@ export async function POST(request: Request) {
     async start(controller) {
       try {
         const response = await client.chat.completions.create({
-          model: CHAT_MODEL,
-          reasoning_effort: REASONING_EFFORT,
-          max_tokens: tokenBudget(200),
+          ...chatParams(200),
           messages: [
             { role: "system", content: system },
             { role: "user", content: userMessage },
