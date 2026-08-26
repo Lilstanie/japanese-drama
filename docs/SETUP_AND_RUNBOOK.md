@@ -265,10 +265,34 @@ present (ElevenLabs preferred for latency). The client just plays whatever bytes
 |-----|---------|
 | `TTS_PROVIDER` | `elevenlabs` (default) or `camb` |
 | `CAMB_API_KEY` | Camb AI key |
-| `CAMB_VOICE_KENJI` / `CAMB_VOICE_WEI` | Numeric voice ids (default 171037 ja / 171145 zh) |
+| `CAMB_VOICE_A` / `CAMB_VOICE_B` | Voice name from `lib/voices.ts`, or a raw numeric Camb id |
 
 `GET /api/podcast/tts/ping` checks whichever provider is active and reports how
 many voices the key can reach.
+
+### Named voices
+
+Speaker A speaks Japanese, speaker B Chinese, and a Camb voice speaks only its
+own language — so the two speakers must be paired with voices from different
+catalogues. `lib/voices.ts` names those pairings
+(`<speaker>-<language>_<gender>_<provider>`):
+
+| Name | Camb voice | Language |
+|------|-----------|----------|
+| `A-japanese_male_camb` (default A) | Haruto Aoki (171037) | ja-jp |
+| `A-japanese_female_camb` | Hina Endo (171038) | ja-jp |
+| `B-chinese_male_camb` (default B) | Lei Sun (171145) | zh-cn |
+| `B-chinese_female_camb` | Yan Yang (171147) | zh-cn |
+
+Catalogue totals: **18 Japanese** voices (12 male / 6 female) and **37 Mandarin**
+(29 / 8). `CAMB_VOICE_A` / `CAMB_VOICE_B` take a name from the table or a raw
+numeric id to try any other voice without a code change; an unrecognised value
+logs a warning and falls back to the default rather than failing the request.
+
+`GET /api/podcast/tts/ping` reports the resolved voice for each speaker and
+whether the key can actually reach it, and responses carry an `X-TTS-Voice`
+header — so a wrong voice is visible immediately rather than as an
+unexpected-sounding line mid-podcast.
 
 ### Camb AI (measured)
 

@@ -1,5 +1,7 @@
 // GET /api/podcast/tts/ping — check whichever TTS provider is configured
 
+import { resolveVoice } from "@/lib/voices"
+
 async function pingElevenLabs(key: string) {
   const res = await fetch("https://api.elevenlabs.io/v1/voices", {
     headers: { "xi-api-key": key },
@@ -50,14 +52,26 @@ async function pingCamb(key: string) {
     Array.isArray(raw) ? raw : ((raw as { payload?: unknown[] })?.payload ?? [])
   ) as { id: number; voice_name: string; language: number }[]
 
-  // Language 88 is Japanese; without one of those the podcast has no native voice.
+  // 88 = Japanese, 139 = Mandarin. The podcast needs one of each: speaker A is
+  // Japanese and speaker B Chinese, and a Camb voice speaks only its own language.
   const japanese = voices.filter((v) => v.language === 88)
+  const chinese = voices.filter((v) => v.language === 139)
+
+  // Report what the two speakers will actually use, so a bad override is
+  // visible here rather than as a wrong-language voice mid-podcast.
+  const a = resolveVoice("A")
+  const b = resolveVoice("B")
+  const reachable = (id: number) => voices.some((v) => v.id === id)
+
   return {
     ok: true,
     provider: "camb" as const,
     voiceCount: voices.length,
-    japaneseVoiceCount: japanese.length,
-    sample: japanese.slice(0, 3).map((v) => `${v.voice_name} (${v.id})`),
+    available: { japanese: japanese.length, chinese: chinese.length },
+    speakers: {
+      A: { ...a, reachable: reachable(a.cambId) },
+      B: { ...b, reachable: reachable(b.cambId) },
+    },
   }
 }
 

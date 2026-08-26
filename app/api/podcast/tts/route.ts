@@ -11,6 +11,8 @@
  * See docs/SETUP_AND_RUNBOOK.md §8.
  */
 
+import { resolveVoice } from "@/lib/voices"
+
 type Speaker = "A" | "B"
 type Lang = "ja" | "zh"
 
@@ -18,18 +20,6 @@ const ELEVENLABS_VOICES: Record<Speaker, string> = {
   A: process.env.ELEVENLABS_VOICE_KENJI ?? "pNInz6obpgDQGcFmaJgB", // Adam — Japanese
   B: process.env.ELEVENLABS_VOICE_WEI ?? "VR6AewLTigWG4xSOukaG", // Arnold — Chinese
 }
-
-/**
- * Camb voice ids are numeric and language-specific — unlike ElevenLabs, one
- * voice cannot speak both languages. Defaults are native speakers from Camb's
- * catalogue: 171037 Haruto Aoki (ja), 171145 Lei Sun (zh).
- */
-const CAMB_VOICES: Record<Speaker, number> = {
-  A: Number(process.env.CAMB_VOICE_KENJI ?? 171037),
-  B: Number(process.env.CAMB_VOICE_WEI ?? 171145),
-}
-
-const CAMB_LOCALES: Record<Lang, string> = { ja: "ja-jp", zh: "zh-cn" }
 
 function selectedProvider(): "elevenlabs" | "camb" | null {
   const explicit = process.env.TTS_PROVIDER?.toLowerCase()
@@ -69,7 +59,11 @@ async function synthElevenLabs(text: string, speaker: Speaker) {
   return { res, contentType: "audio/mpeg" }
 }
 
-async function synthCamb(text: string, speaker: Speaker, lang: Lang) {
+async function synthCamb(text: string, speaker: Speaker) {
+  // Camb voices are language-specific, so the voice carries its own locale
+  // rather than taking the caller's detected language.
+  const voice = resolveVoice(speaker)
+
   const res = await fetch("https://client.camb.ai/apis/tts-stream", {
     method: "POST",
     headers: {
@@ -78,13 +72,13 @@ async function synthCamb(text: string, speaker: Speaker, lang: Lang) {
     },
     body: JSON.stringify({
       text,
-      voice_id: CAMB_VOICES[speaker],
-      language: CAMB_LOCALES[lang],
+      voice_id: voice.cambId,
+      language: voice.locale,
       speech_model: "mars-8.1-flash-beta",
       output_configuration: { format: "wav" },
     }),
   })
-  return { res, contentType: "audio/wav" }
+  return { res, contentType: "audio/wav", voiceName: voice.name }
 }
 
 export async function POST(request: Request) {
@@ -106,7 +100,6 @@ export async function POST(request: Request) {
 
   // If Wei slipped into Japanese, use Kenji's voice so it sounds natural.
   const effectiveSpeaker: Speaker = lang === "ja" ? "A" : speaker
-  const effectiveLang: Lang = lang ?? (effectiveSpeaker === "A" ? "ja" : "zh")
 
   // Camb rejects text outside 3–3000 characters with a validation error rather
   // than audio, so short interjections ("はい。") would fail mid-podcast.
@@ -116,10 +109,10 @@ export async function POST(request: Request) {
       : text.trim().slice(0, 3000)
 
   try {
-    const { res, contentType } =
+    const { res, contentType, voiceName } =
       provider === "camb"
-        ? await synthCamb(payload, effectiveSpeaker, effectiveLang)
-        : await synthElevenLabs(payload, effectiveSpeaker)
+        ? await synthCamb(payload, effectiveSpeaker)
+        : { ...(await synthElevenLabs(payload, effectiveSpeaker)), voiceName: undefined }
 
     if (!res.ok) {
       const err = await res.text()
@@ -132,6 +125,7 @@ export async function POST(request: Request) {
         "Content-Type": contentType,
         "Cache-Control": "no-store",
         "X-TTS-Provider": provider,
+        ...(voiceName ? { "X-TTS-Voice": voiceName } : {}),
       },
     })
   } catch (err) {

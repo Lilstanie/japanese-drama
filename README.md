@@ -44,8 +44,8 @@ ELEVENLABS_VOICE_WEI=optional_voice_id
 
 # Camb AI — Japanese-native voices (slower than ElevenLabs)
 CAMB_API_KEY=your_camb_key
-CAMB_VOICE_KENJI=171037
-CAMB_VOICE_WEI=171145
+CAMB_VOICE_A=A-japanese_male_camb
+CAMB_VOICE_B=B-chinese_male_camb
 
 # Optional scenario extensions
 EXTRA_SCENARIOS_JSON=[]
