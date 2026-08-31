@@ -90,7 +90,7 @@ export async function GET() {
     return Response.json({
       ok: false,
       provider,
-      reason: `${provider === "camb" ? "CAMB_API_KEY" : "ELEVENLABS_API_KEY"} not set in .env.local`,
+      reason: `${provider === "camb" ? "CAMB_API_KEY" : "ELEVENLABS_API_KEY"} is not set (.env.local locally, or the project's Environment Variables on Vercel). Podcast falls back to browser Web Speech voices.`,
     })
   }
 
