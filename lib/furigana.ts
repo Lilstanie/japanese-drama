@@ -42,7 +42,3 @@ export function parseFuriganaSegments(text: string): FuriganaSegment[] {
 
   return segments
 }
-
-export function parseRuby(text: string): string {
-  return text.replace(/([一-龯々][一-龯々ぁ-ん]*)\(([ぁ-ん]+)\)/g, "<ruby>$1<rt>$2</rt></ruby>")
-}

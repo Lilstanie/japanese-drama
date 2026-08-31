@@ -1,9 +1,6 @@
-import OpenAI from "openai"
+import { chatParams, createAIClient } from "@/lib/model"
 
-const client = new OpenAI({
-  apiKey: process.env.GROQ_API_KEY,
-  baseURL: "https://api.groq.com/openai/v1",
-})
+const client = createAIClient()
 
 const SYSTEM_A = (topic: string, difficulty: string, seed: string) =>
   `あなたはKenjiです。日本人の26歳男性で、友達のWeiと気楽に話しています。
@@ -55,8 +52,7 @@ export async function POST(request: Request) {
     async start(controller) {
       try {
         const response = await client.chat.completions.create({
-          model: "llama-3.3-70b-versatile",
-          max_tokens: 200,
+          ...chatParams(200),
           messages: [
             { role: "system", content: system },
             { role: "user", content: userMessage },

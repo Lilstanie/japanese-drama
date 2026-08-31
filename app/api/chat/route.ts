@@ -1,12 +1,9 @@
-import OpenAI from "openai"
+import { chatParams, createAIClient, friendlyAIError } from "@/lib/model"
 import { getScenario } from "@/lib/scenarios"
 import type { Message } from "@/lib/types"
 
 export async function POST(request: Request) {
-  const client = new OpenAI({
-    apiKey: process.env.GROQ_API_KEY,
-    baseURL: "https://api.groq.com/openai/v1",
-  })
+  const client = createAIClient()
   const { scenarioId, messages, userInput } = await request.json() as {
     scenarioId: string
     messages: Message[]
@@ -48,8 +45,7 @@ Current scenario: ${scenario.description}${loadExtraPrompt(scenario.id)}`
     async start(controller) {
       try {
         const response = await client.chat.completions.create({
-          model: "llama-3.3-70b-versatile",
-          max_tokens: 512,
+          ...chatParams(512),
           messages: [{ role: "system", content: systemPrompt }, ...history],
           stream: true,
         })
@@ -59,8 +55,7 @@ Current scenario: ${scenario.description}${loadExtraPrompt(scenario.id)}`
           if (text) controller.enqueue(encoder.encode(text))
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Unknown error"
-        controller.enqueue(encoder.encode(`[错误: ${msg}]`))
+        controller.enqueue(encoder.encode(friendlyAIError(err, "chat")))
       } finally {
         controller.close()
       }

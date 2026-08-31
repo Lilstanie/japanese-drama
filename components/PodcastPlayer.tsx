@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import Link from "next/link"
+import KatakanaToggle from "@/components/KatakanaToggle"
 import { PODCAST_TOPICS } from "@/lib/podcast-topics"
 import type { PodcastTopic } from "@/lib/podcast-topics"
 import { speakLine, cancelSpeech, initBackgroundAudio, setTTSMode } from "@/lib/tts"
@@ -275,6 +276,8 @@ export default function PodcastPlayer() {
           </span>
         </div>
 
+        <div className="flex items-center gap-2">
+        <KatakanaToggle />
         {/* Copy transcript */}
         <button
           onClick={handleCopy}
@@ -285,6 +288,7 @@ export default function PodcastPlayer() {
         >
           {copied ? "✓ 已复制" : "复制对话"}
         </button>
+        </div>
       </div>
 
       {/* Topic / Difficulty */}

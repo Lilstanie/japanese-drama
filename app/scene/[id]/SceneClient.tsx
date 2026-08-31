@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import KatakanaToggle from "@/components/KatakanaToggle"
 import Image from "next/image"
 import DialogPanel from "@/components/DialogPanel"
 import CoachPanel from "@/components/CoachPanel"
@@ -283,6 +284,7 @@ export default function SceneClient({ scenario }: { scenario: Scenario }) {
             }}>
             ローマ字
           </button>
+          <KatakanaToggle />
           <button
             onClick={handleReset}
             className="text-xs px-3 py-1 rounded-lg transition-all"

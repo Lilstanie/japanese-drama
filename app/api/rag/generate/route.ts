@@ -1,4 +1,4 @@
-import OpenAI from "openai"
+import { chatParams, createAIClient, friendlyAIError } from "@/lib/model"
 import { formatChunksForPrompt, retrieve } from "@/lib/rag/index"
 import type { RetrievedChunk } from "@/lib/rag/types"
 
@@ -40,10 +40,7 @@ export async function POST(request: Request) {
   const context = formatChunksForPrompt(chunks)
   const userMessage = `用户问题：${q}\n\n检索上下文（共 ${chunks.length} 段）：\n\n${context}`
 
-  const client = new OpenAI({
-    apiKey: process.env.GROQ_API_KEY,
-    baseURL: "https://api.groq.com/openai/v1",
-  })
+  const client = createAIClient()
 
   const encoder = new TextEncoder()
 
@@ -51,8 +48,7 @@ export async function POST(request: Request) {
     async start(controller) {
       try {
         const response = await client.chat.completions.create({
-          model: "llama-3.3-70b-versatile",
-          max_tokens: 768,
+          ...chatParams(768),
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: userMessage },
@@ -65,8 +61,7 @@ export async function POST(request: Request) {
           if (text) controller.enqueue(encoder.encode(text))
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Unknown error"
-        controller.enqueue(encoder.encode(`[错误: ${msg}]`))
+        controller.enqueue(encoder.encode(friendlyAIError(err, "rag/generate")))
       } finally {
         controller.close()
       }

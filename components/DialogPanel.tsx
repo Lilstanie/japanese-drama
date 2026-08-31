@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import type { Message } from "@/lib/types"
 import { convertToRomaji } from "@/lib/romaji"
-import FuriganaText from "@/components/FuriganaText"
+import JapaneseText from "@/components/JapaneseText"
 
 function stripFurigana(text: string): string {
   // Strip both half-width () and full-width （）; also allow ー (long vowel) inside readings
@@ -128,7 +128,7 @@ function Bubble({
             {characterName}
           </div>
         )}
-        <div className="ruby-text"><FuriganaText text={msg.content} /></div>
+        <div className="ruby-text"><JapaneseText text={msg.content} /></div>
         {showRomaji && (
           <div className="mt-1.5 text-xs italic leading-snug border-t pt-1"
             style={{ color: isUser ? "#f0c080" : "#a07850", borderColor: isUser ? "#9c6b24" : "#3d2010" }}>
@@ -257,7 +257,7 @@ export default function DialogPanel({
             <div className="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed"
               style={{ background: "#2d1508", color: "#f0d5a0", border: "1px solid #5c3010", borderBottomLeftRadius: "4px" }}>
               <div className="text-xs mb-1 font-semibold" style={{ color: "#f59e0b" }}>{characterName}</div>
-              <div className="ruby-text"><FuriganaText text={streamingText} /></div>
+              <div className="ruby-text"><JapaneseText text={streamingText} isStreaming /></div>
               {showRomaji && (
                 <div className="mt-1.5 text-xs italic leading-snug border-t pt-1"
                   style={{ color: "#a07850", borderColor: "#3d2010" }}>
