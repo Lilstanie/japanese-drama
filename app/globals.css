@@ -105,3 +105,20 @@ ruby rt {
 textarea::placeholder {
   color: #5c3d1e;
 }
+
+/*
+ * Katakana that was looked up and is NOT a loanword — kana-chart rows,
+ * onomatopoeia, native words, brand names.
+ *
+ * Without this, "checked, nothing to show" and "lookup never ran" are visually
+ * identical, and the absence of English reads as a broken feature. Deliberately
+ * fainter than .kt-mark: it marks an answer, not an annotation.
+ */
+.kt-plain {
+  border-bottom: 1px dotted rgba(160, 120, 80, 0.45);
+  padding-bottom: 1px;
+}
+
+.coach-text .kt-plain {
+  border-bottom-color: rgba(120, 150, 190, 0.4);
+}

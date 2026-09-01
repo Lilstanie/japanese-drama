@@ -71,8 +71,22 @@ export default function JapaneseText({
           )
         }
 
-        if (!seg.gloss || !showKatakanaEn) {
-          return <span key={i}>{seg.term}</span>
+        if (!showKatakanaEn) return <span key={i}>{seg.term}</span>
+
+        if (!seg.gloss) {
+          // Checked and confirmed not a loanword — mark it, so "no English
+          // here" reads as an answer rather than as the feature failing.
+          // A pending lookup stays bare until its answer arrives.
+          if (seg.status !== "checked") return <span key={i}>{seg.term}</span>
+          return (
+            <span
+              key={i}
+              className="kt-plain"
+              title={`${seg.term} — 非外来语（不是借词）`}
+            >
+              {seg.term}
+            </span>
+          )
         }
 
         const origin = seg.src ? LANGUAGE_NAMES[seg.src] ?? seg.src : "English"

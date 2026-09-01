@@ -5,7 +5,7 @@ import Link from "next/link"
 import KatakanaToggle from "@/components/KatakanaToggle"
 import { PODCAST_TOPICS } from "@/lib/podcast-topics"
 import type { PodcastTopic } from "@/lib/podcast-topics"
-import { speakLine, cancelSpeech, initBackgroundAudio, setTTSMode } from "@/lib/tts"
+import { speakLine, cancelSpeech, initBackgroundAudio, setTTSMode, prefetchLineAudio, toSpeechText } from "@/lib/tts"
 import type { TTSMode } from "@/lib/tts"
 import PodcastTranscript from "./PodcastTranscript"
 import PodcastControls from "./PodcastControls"
@@ -143,23 +143,29 @@ export default function PodcastPlayer() {
   }
 
   const runPodcastLoop = useCallback(async (gen: number) => {
-    // nextLinePrefetch: a promise that resolves with the pre-fetched line for the NEXT turn.
-    // We start it during the gap so there's no idle wait between speakers.
-    let nextLinePrefetch: Promise<string | null> | null = null
+    // nextLinePrefetch resolves with the NEXT turn's text *and* its audio.
+    // Both are started while the current line is still speaking, so neither the
+    // model call nor the (slower) speech synthesis sits on the critical path.
+    type Prefetched = { text: string; audio: Promise<Blob | null> } | null
+    let nextLinePrefetch: Promise<Prefetched> | null = null
 
     while (isPlayingRef.current && loopGenRef.current === gen) {
       const speaker = currentSpeakerRef.current
 
       let line: string | null = null
+      // Audio for this line, if it was fetched ahead of time.
+      let audioPromise: Promise<Blob | null> | null = null
 
       if (nextLinePrefetch) {
         // Line was pre-fetched while the previous one was playing
         setIsGenerating(true)
-        line = await nextLinePrefetch
+        const pre = await nextLinePrefetch
         nextLinePrefetch = null
+        line = pre?.text ?? null
+        audioPromise = pre?.audio ?? null
         setIsGenerating(false)
       } else {
-        // First turn or after a reset — fetch now
+        // First turn or after a reset — nothing is warm yet, so this one waits.
         setIsGenerating(true)
         line = await fetchWithRetry(topicRef.current, difficultyRef.current, speaker, historyRef.current)
         setIsGenerating(false)
@@ -189,13 +195,23 @@ export default function PodcastPlayer() {
       const snapDiff = difficultyRef.current
       const myGen = gen
 
-      nextLinePrefetch = gap(GAP_MS).then(() => {
+      nextLinePrefetch = gap(GAP_MS).then(async () => {
         if (!isPlayingRef.current || loopGenRef.current !== myGen) return null
-        return fetchWithRetry(snapTopic, snapDiff, nextSpeaker, snapHistory)
+        const text = await fetchWithRetry(snapTopic, snapDiff, nextSpeaker, snapHistory)
+        if (!text?.trim()) return null
+        if (!isPlayingRef.current || loopGenRef.current !== myGen) return null
+        // Start synthesis immediately and do NOT await it — it runs while the
+        // current line is still playing, which is the whole point.
+        return { text, audio: prefetchLineAudio(text, nextSpeaker) }
       })
 
-      const speakText = line.replace(/\([^)）]+\)/g, "")
-      const usedAI = await speakLine(speakText, speaker, speedRef.current, volumeRef.current)
+      const speakText = toSpeechText(line)
+      // Awaiting here costs nothing when the prefetch already finished during
+      // playback of the previous line.
+      const prefetchedAudio = audioPromise ? await audioPromise : null
+      const usedAI = await speakLine(
+        speakText, speaker, speedRef.current, volumeRef.current, prefetchedAudio
+      )
       if (ttsModeRef.current === "ai") setAiWorking(usedAI)
 
       setTranscript(prev => prev.map(l => l.id === newLine.id ? { ...l, isPlaying: false } : l))

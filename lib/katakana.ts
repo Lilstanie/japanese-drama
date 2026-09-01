@@ -1,8 +1,25 @@
 import { lookupLoanword, NON_LOANWORDS, MAX_TERM_LENGTH } from "@/lib/katakana-dict"
 
+/**
+ * `status` separates the two reasons a katakana term shows no English, which
+ * otherwise look identical on screen and read as a broken feature:
+ *
+ *   glossed — a loanword, source word known
+ *   checked — looked up and confirmed NOT a loanword (kana rows, onomatopoeia,
+ *             native words, brand names). Rendered with a subtle marker.
+ *   pending — no answer yet; the gloss lookup is still in flight.
+ */
+export type KatakanaStatus = "glossed" | "checked" | "pending"
+
 export type KatakanaSegment =
   | { type: "text"; text: string }
-  | { type: "katakana"; term: string; gloss: string | null; src?: string }
+  | {
+      type: "katakana"
+      term: string
+      gloss: string | null
+      src?: string
+      status: KatakanaStatus
+    }
 
 /**
  * A katakana run. `・` and `＝` are deliberately excluded so compound loanwords
@@ -80,14 +97,22 @@ function segmentRun(
       term: m.term,
       gloss: m.gloss,
       src: m.src,
+      status: "glossed" as const,
     }))
   }
 
-  // No clean segmentation — hand the whole run to the gloss layer intact.
-  if (n >= MIN_TERM_LENGTH && !NON_LOANWORDS.has(run)) {
-    return [{ type: "katakana", term: run, gloss: null }]
+  // Single characters are never annotated either way.
+  if (n < MIN_TERM_LENGTH) return [{ type: "text", text: run }]
+
+  // Blocklisted, or the model already answered "not a loanword" — say so,
+  // rather than looking indistinguishable from a lookup that never happened.
+  if (NON_LOANWORDS.has(run) || extraGlosses?.get(run) === null) {
+    return [{ type: "katakana", term: run, gloss: null, status: "checked" }]
   }
-  return [{ type: "text", text: run }]
+
+  // No clean segmentation and no answer yet — hand the whole run to the gloss
+  // layer intact.
+  return [{ type: "katakana", term: run, gloss: null, status: "pending" }]
 }
 
 /** Split plain text into glossed katakana terms and everything else. */
@@ -128,7 +153,7 @@ export function collectUnglossedTerms(
 
   for (const seg of parseKatakanaSegments(text, resolved)) {
     if (seg.type !== "katakana") continue
-    if (seg.gloss) continue
+    if (seg.status !== "pending") continue
     if (resolved.has(seg.term)) continue
     terms.add(seg.term)
   }

@@ -18,29 +18,79 @@ function detectLang(text: string): "ja" | "zh" {
   return /[ぁ-ゖァ-ヺ]/.test(text) ? "ja" : "zh"
 }
 
+/**
+ * Strip furigana parentheses before synthesis — 食べ物(たべもの) must be spoken
+ * once, not twice. Exported so a prefetch and its later playback normalise the
+ * text identically; a mismatch would silently discard the prefetched audio.
+ */
+export function toSpeechText(text: string): string {
+  return text.replace(/\([^)）]+\)/g, "")
+}
+
+/**
+ * Fetch a line's audio without playing it.
+ *
+ * The podcast already prefetches the next line's *text* while the current line
+ * speaks, but the audio fetch used to happen inside speakLine — on the critical
+ * path. With ElevenLabs (~1s) that was barely noticeable; with Camb (2-6s, and
+ * far worse on a cold start) it became a silence before every line. Starting
+ * this as soon as the text arrives moves that wait under the current line's
+ * playback.
+ *
+ * Never rejects: a failed prefetch resolves to null and speakLine falls back to
+ * fetching inline, so prefetching can only help.
+ */
+export function prefetchLineAudio(
+  text: string,
+  speaker: "A" | "B"
+): Promise<Blob | null> {
+  if (typeof window === "undefined" || currentMode !== "ai") {
+    return Promise.resolve(null)
+  }
+
+  const speech = toSpeechText(text)
+  const lang = speaker === "A" ? "ja" : detectLang(speech)
+
+  return fetch("/api/podcast/tts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: speech, speaker, lang }),
+  })
+    .then((res) => (res.ok ? res.blob() : null))
+    .catch(() => null)
+}
+
 // ── AI provider path (ElevenLabs / Camb AI, chosen server-side) ────────────
 
 async function speakAI(
   text: string,
   speaker: "A" | "B",
   speed: number,
-  volume: number
+  volume: number,
+  prefetched?: Blob | null
 ): Promise<void> {
   cleanupAudio()
   const myGen = ++speakGen
 
-  const lang = speaker === "A" ? "ja" : detectLang(text)
-  const res = await fetch("/api/podcast/tts", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, speaker, lang }),
-  })
-  if (!res.ok) throw new Error(`TTS ${res.status}`)
+  let blob = prefetched ?? null
 
-  // cancelSpeech() may have been called during the fetch — bail out silently
+  if (!blob) {
+    // No usable prefetch (not started, or it failed) — fetch on the spot.
+    const lang = speaker === "A" ? "ja" : detectLang(text)
+    const res = await fetch("/api/podcast/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, speaker, lang }),
+    })
+    if (!res.ok) throw new Error(`TTS ${res.status}`)
+
+    // cancelSpeech() may have been called during the fetch — bail out silently
+    if (speakGen !== myGen) return
+    blob = await res.blob()
+  }
+
   if (speakGen !== myGen) return
 
-  const blob = await res.blob()
   const url = URL.createObjectURL(blob)
 
   return new Promise((resolve) => {
@@ -138,15 +188,16 @@ export async function speakLine(
   text: string,
   speaker: "A" | "B",
   speed: number,
-  volume: number
+  volume: number,
+  prefetched?: Blob | null
 ): Promise<boolean> {
   if (typeof window === "undefined") return false
   if (currentMode === "ai") {
     try {
-      await speakAI(text, speaker, speed, volume)
+      await speakAI(text, speaker, speed, volume, prefetched)
       return true
     } catch (err) {
-      console.warn("[tts] ElevenLabs failed, falling back to Web Speech:", err)
+      console.warn("[tts] AI voice failed, falling back to Web Speech:", err)
     }
   }
   await speakWeb(text, speaker, speed, volume)

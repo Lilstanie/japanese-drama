@@ -1,5 +1,5 @@
 import { parseFuriganaSegments } from "@/lib/furigana"
-import { parseKatakanaSegments } from "@/lib/katakana"
+import { parseKatakanaSegments, type KatakanaStatus } from "@/lib/katakana"
 
 /**
  * One pass over Japanese text producing both annotation layers:
@@ -8,7 +8,13 @@ import { parseKatakanaSegments } from "@/lib/katakana"
 export type JaSegment =
   | { type: "text"; text: string }
   | { type: "ruby"; kanji: string; reading: string; okurigana: string }
-  | { type: "katakana"; term: string; gloss: string | null; src?: string }
+  | {
+      type: "katakana"
+      term: string
+      gloss: string | null
+      src?: string
+      status: KatakanaStatus
+    }
 
 /**
  * Furigana is parsed first because its markup (`食べ物(たべもの)`) must stay
