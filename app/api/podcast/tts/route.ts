@@ -11,7 +11,7 @@
  * See docs/SETUP_AND_RUNBOOK.md §8.
  */
 
-import { resolveVoice } from "@/lib/voices"
+import { resolveVoice, voiceByName } from "@/lib/voices"
 
 type Speaker = "A" | "B"
 type Lang = "ja" | "zh"
@@ -59,10 +59,11 @@ async function synthElevenLabs(text: string, speaker: Speaker) {
   return { res, contentType: "audio/mpeg" }
 }
 
-async function synthCamb(text: string, speaker: Speaker) {
-  // Camb voices are language-specific, so the voice carries its own locale
-  // rather than taking the caller's detected language.
-  const voice = resolveVoice(speaker)
+async function synthCamb(text: string, speaker: Speaker, voiceName?: string) {
+  // An explicitly requested voice wins; otherwise the speaker's default. Either
+  // way the voice carries its own locale, since Camb voices are
+  // language-specific and cannot take the caller's detected language.
+  const voice = voiceByName(voiceName) ?? resolveVoice(speaker)
 
   const res = await fetch("https://client.camb.ai/apis/tts-stream", {
     method: "POST",
@@ -82,10 +83,11 @@ async function synthCamb(text: string, speaker: Speaker) {
 }
 
 export async function POST(request: Request) {
-  const { text, speaker, lang } = (await request.json()) as {
+  const { text, speaker, lang, voice } = (await request.json()) as {
     text: string
     speaker: Speaker
     lang?: Lang // detected on client from actual text content
+    voice?: string // optional registered voice name, e.g. A-japanese_female_camb
   }
 
   if (!text?.trim()) return Response.json({ error: "No text" }, { status: 400 })
@@ -111,7 +113,7 @@ export async function POST(request: Request) {
   try {
     const { res, contentType, voiceName } =
       provider === "camb"
-        ? await synthCamb(payload, effectiveSpeaker)
+        ? await synthCamb(payload, effectiveSpeaker, voice)
         : { ...(await synthElevenLabs(payload, effectiveSpeaker)), voiceName: undefined }
 
     if (!res.ok) {

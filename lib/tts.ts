@@ -42,7 +42,8 @@ export function toSpeechText(text: string): string {
  */
 export function prefetchLineAudio(
   text: string,
-  speaker: "A" | "B"
+  speaker: "A" | "B",
+  voice?: string
 ): Promise<Blob | null> {
   if (typeof window === "undefined" || currentMode !== "ai") {
     return Promise.resolve(null)
@@ -54,7 +55,7 @@ export function prefetchLineAudio(
   return fetch("/api/podcast/tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: speech, speaker, lang }),
+    body: JSON.stringify({ text: speech, speaker, lang, voice }),
   })
     .then((res) => (res.ok ? res.blob() : null))
     .catch(() => null)
@@ -67,7 +68,8 @@ async function speakAI(
   speaker: "A" | "B",
   speed: number,
   volume: number,
-  prefetched?: Blob | null
+  prefetched?: Blob | null,
+  voice?: string
 ): Promise<void> {
   cleanupAudio()
   const myGen = ++speakGen
@@ -80,7 +82,7 @@ async function speakAI(
     const res = await fetch("/api/podcast/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, speaker, lang }),
+      body: JSON.stringify({ text, speaker, lang, voice }),
     })
     if (!res.ok) throw new Error(`TTS ${res.status}`)
 
@@ -189,12 +191,13 @@ export async function speakLine(
   speaker: "A" | "B",
   speed: number,
   volume: number,
-  prefetched?: Blob | null
+  prefetched?: Blob | null,
+  voice?: string
 ): Promise<boolean> {
   if (typeof window === "undefined") return false
   if (currentMode === "ai") {
     try {
-      await speakAI(text, speaker, speed, volume, prefetched)
+      await speakAI(text, speaker, speed, volume, prefetched, voice)
       return true
     } catch (err) {
       console.warn("[tts] AI voice failed, falling back to Web Speech:", err)

@@ -270,6 +270,22 @@ present (ElevenLabs preferred for latency). The client just plays whatever bytes
 `GET /api/podcast/tts/ping` checks whichever provider is active and reports how
 many voices the key can reach.
 
+### Where the AI voice is reachable from the UI
+
+| Page | Control | Voice |
+|------|---------|-------|
+| `/podcast` | ▶ play | Speaker A/B defaults (ja / zh) |
+| `/scene/[id]` | 🔊 per message, and 🔊 自动 | Character = `A-japanese_female_camb`, learner = `A-japanese_male_camb` |
+
+Scene lines are all Japanese, so the two sides cannot be told apart by speaker
+the way the podcast's two languages can — the request names the voice explicitly
+via the `voice` field on `POST /api/podcast/tts`. An unrecognised name falls back
+to the speaker default rather than failing.
+
+The **🎙 AI 语音 / 💻 浏览器语音** button in the scene header switches between the
+provider voice and the browser's built-in speech synthesis; the browser voice
+pickers only appear in browser mode, where they mean something.
+
 ### Named voices
 
 Speaker A speaks Japanese, speaker B Chinese, and a Camb voice speaks only its

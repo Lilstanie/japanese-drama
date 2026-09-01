@@ -150,6 +150,33 @@ describe("podcast voice resolution", () => {
     assert.equal(v.resolveVoice("A").name, "A-japanese_male_camb")
   })
 
+  test("a name requested by the client resolves to that voice", async () => {
+    // The scene UI asks for a specific voice so the character and the learner
+    // do not sound identical — both are Japanese, so speaker alone cannot tell
+    // them apart.
+    const v = await freshVoices({ ...clear })
+    const char = v.voiceByName("A-japanese_female_camb")
+    const user = v.voiceByName("A-japanese_male_camb")
+    assert.equal(char?.gender, "female")
+    assert.equal(user?.gender, "male")
+    assert.equal(char?.locale, "ja-jp")
+    assert.equal(user?.locale, "ja-jp")
+    assert.notEqual(char?.cambId, user?.cambId)
+  })
+
+  test("an unknown requested name returns null so the caller can fall back", async () => {
+    const v = await freshVoices({ ...clear })
+    assert.equal(v.voiceByName("bogus-name"), null)
+    assert.equal(v.voiceByName(undefined), null)
+  })
+
+  test("voicesForLanguage offers a real choice per language", async () => {
+    const v = await freshVoices({ ...clear })
+    assert.ok(v.voicesForLanguage("ja").length >= 2)
+    assert.ok(v.voicesForLanguage("zh").length >= 2)
+    assert.ok(v.voicesForLanguage("ja").every((x: { locale: string }) => x.locale === "ja-jp"))
+  })
+
   test("every registered voice has a locale matching its speaker", async () => {
     const v = await freshVoices({ ...clear })
     for (const name of v.listVoiceNames()) {

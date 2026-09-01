@@ -117,3 +117,20 @@ export function resolveVoice(speaker: "A" | "B"): NamedVoice {
 export function listVoiceNames(): string[] {
   return Object.keys(NAMED_VOICES)
 }
+
+/**
+ * Look up a voice the caller asked for by name.
+ *
+ * Returns null for an unknown name rather than throwing, so a stale value from
+ * a client cannot break synthesis — the caller falls back to the speaker's
+ * default voice.
+ */
+export function voiceByName(name: string | undefined): NamedVoice | null {
+  if (!name) return null
+  return NAMED_VOICES[name] ?? null
+}
+
+/** Voices available for a given language, for building a picker. */
+export function voicesForLanguage(language: VoiceLanguage): NamedVoice[] {
+  return Object.values(NAMED_VOICES).filter((v) => v.language === language)
+}

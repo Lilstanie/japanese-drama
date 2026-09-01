@@ -4,11 +4,21 @@ import { useEffect, useRef, useState, useCallback } from "react"
 import type { Message } from "@/lib/types"
 import { convertToRomaji } from "@/lib/romaji"
 import JapaneseText from "@/components/JapaneseText"
+import { speakLine, cancelSpeech } from "@/lib/tts"
 
 function stripFurigana(text: string): string {
   // Strip both half-width () and full-width （）; also allow ー (long vowel) inside readings
   return text.replace(/[（(][ぁ-んァ-ンー]+[)）]/g, "")
 }
+
+/**
+ * Both sides of a scene speak Japanese, so they need two different Japanese
+ * voices — unlike the podcast, where the speakers differ by language.
+ */
+const AI_VOICE = {
+  character: "A-japanese_female_camb",
+  user: "A-japanese_male_camb",
+} as const
 
 function isFemaleVoice(name: string) {
   return /kyoko|o-ren|haruka|nanami|keiko|mizuki|sakura|hana|yui|female|woman/i.test(name)
@@ -153,6 +163,8 @@ export default function DialogPanel({
   const [charVoice, setCharVoice] = useState("")
   const [userVoice, setUserVoice] = useState("")
   const [autoPlay, setAutoPlay] = useState(false)
+  // AI voice (Camb / ElevenLabs) vs the browser's built-in speech synthesis.
+  const [useAIVoice, setUseAIVoice] = useState(true)
   const prevLengthRef = useRef(messages.length)
 
   useEffect(() => {
@@ -181,23 +193,41 @@ export default function DialogPanel({
     if (!autoPlay) { prevLengthRef.current = messages.length; return }
     if (messages.length > prevLengthRef.current && !isStreaming) {
       const last = messages[messages.length - 1]
-      if (last && last.role === "character" && charVoice) {
-        speak(last.content, charVoice, () => setPlayingId(null))
-        setPlayingId(last.id)
+      if (last && last.role === "character") {
+        if (useAIVoice) {
+          setPlayingId(last.id)
+          speakLine(stripFurigana(last.content), "A", 1, 1, null, AI_VOICE.character)
+            .then(() => setPlayingId(cur => (cur === last.id ? null : cur)))
+        } else if (charVoice) {
+          speak(last.content, charVoice, () => setPlayingId(null))
+          setPlayingId(last.id)
+        }
       }
     }
     prevLengthRef.current = messages.length
-  }, [messages, isStreaming, autoPlay, charVoice])
+  }, [messages, isStreaming, autoPlay, charVoice, useAIVoice])
 
-  const handlePlay = useCallback((id: string, text: string) => {
-    // find the message to know if it's user or character
+  const handlePlay = useCallback(async (id: string, text: string) => {
     const msg = messages.find(m => m.id === id)
-    const voiceName = msg?.role === "user" ? userVoice : charVoice
-    speak(text, voiceName, () => setPlayingId(null))
+    const isUser = msg?.role === "user"
     setPlayingId(id)
-  }, [messages, charVoice, userVoice])
+
+    if (useAIVoice) {
+      // Scene lines are always Japanese, so speaker "A" regardless of who said
+      // it; the two sides are told apart by voice, not by language.
+      await speakLine(
+        stripFurigana(text), "A", 1, 1, null,
+        isUser ? AI_VOICE.user : AI_VOICE.character
+      )
+      setPlayingId(cur => (cur === id ? null : cur))
+      return
+    }
+
+    speak(text, isUser ? userVoice : charVoice, () => setPlayingId(null))
+  }, [messages, charVoice, userVoice, useAIVoice])
 
   const handleStop = useCallback(() => {
+    cancelSpeech()
     window.speechSynthesis?.cancel()
     setPlayingId(null)
   }, [])
@@ -215,22 +245,46 @@ export default function DialogPanel({
         <span className="text-xs" style={{ color: "#7a5c38" }}>との会話</span>
       </div>
 
-      {/* Header row 2: voice selectors + auto-play */}
-      {jaVoices.length > 0 && (
-        <div className="px-4 pb-2 border-b flex flex-wrap gap-x-3 gap-y-1 items-center"
-          style={{ borderColor: "#3d2010", background: "#1a0c02" }}>
-          <VoiceSelect
-            label="角色声音"
-            voices={jaVoices}
-            value={charVoice}
-            onChange={v => { setCharVoice(v); window.speechSynthesis?.cancel(); setPlayingId(null) }}
-          />
-          <VoiceSelect
-            label="我的声音"
-            voices={jaVoices}
-            value={userVoice}
-            onChange={v => { setUserVoice(v); window.speechSynthesis?.cancel(); setPlayingId(null) }}
-          />
+      {/* Header row 2: voice source, selectors, auto-play */}
+      <div className="px-4 pb-2 border-b flex flex-wrap gap-x-3 gap-y-1 items-center"
+        style={{ borderColor: "#3d2010", background: "#1a0c02" }}>
+        <button
+          onClick={() => {
+            cancelSpeech()
+            window.speechSynthesis?.cancel()
+            setPlayingId(null)
+            setUseAIVoice(v => !v)
+          }}
+          className="text-xs px-2.5 py-1 rounded-lg border transition-all"
+          title={useAIVoice
+            ? "正在用 AI 语音（日语母语发音）· 点击切换为浏览器语音"
+            : "正在用浏览器语音 · 点击切换为 AI 语音"}
+          style={useAIVoice
+            ? { background: "#5eead4", color: "#08201c", borderColor: "#5eead4", fontWeight: 600 }
+            : { background: "transparent", color: "#7a5c38", borderColor: "#3d2010" }
+          }
+        >
+          {useAIVoice ? "🎙 AI 语音" : "💻 浏览器语音"}
+        </button>
+
+        {/* Browser voice pickers are meaningless while the AI voice is on. */}
+        {!useAIVoice && jaVoices.length > 0 && (
+          <>
+            <VoiceSelect
+              label="角色声音"
+              voices={jaVoices}
+              value={charVoice}
+              onChange={v => { setCharVoice(v); window.speechSynthesis?.cancel(); setPlayingId(null) }}
+            />
+            <VoiceSelect
+              label="我的声音"
+              voices={jaVoices}
+              value={userVoice}
+              onChange={v => { setUserVoice(v); window.speechSynthesis?.cancel(); setPlayingId(null) }}
+            />
+          </>
+        )}
+
           <button
             onClick={() => setAutoPlay(v => !v)}
             className="ml-auto text-xs px-2.5 py-1 rounded-lg border transition-all"
@@ -242,8 +296,7 @@ export default function DialogPanel({
           >
             {autoPlay ? "🔊 自动" : "🔇 手动"}
           </button>
-        </div>
-      )}
+      </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {messages.map(msg => (
