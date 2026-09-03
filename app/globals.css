@@ -19,17 +19,44 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * Furigana readings.
+ *
+ * Not native ruby layout: `ruby-align` is unevenly supported, and Chrome left
+ * readings visibly off-centre over their kanji — 「ま」 over 曲 sat to the left.
+ * This lays each ruby out as an inline-block whose two lines are centred on one
+ * another, which is the same mechanism the katakana boxes use, so both
+ * annotation layers align identically.
+ *
+ * The box's width is whichever line is wider, so a long reading over a narrow
+ * kanji (わたくし over 私) widens the box instead of colliding with the reading
+ * next to it. An inline-block's baseline is its last line box — .rb — so the
+ * kanji stays on the surrounding text's baseline.
+ *
+ * This requires <rt> to precede the base in the DOM; JapaneseText emits it that
+ * way.
+ */
 ruby {
-  ruby-align: center;
-  ruby-overhang: none;
+  display: inline-block;
+  text-align: center;
+  vertical-align: baseline;
+  line-height: 1;
+  /* Keeps two wide readings over narrow kanji from touching (わたくし|ちから). */
+  margin: 0 0.06em;
 }
 
 ruby rt {
-  font-size: 0.5em;
+  display: block;
   color: #f59e0b;
-  text-align: center;
-  line-height: 1;
+  font-size: 0.5em;
+  line-height: 1.15;
   letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+ruby .rb {
+  display: block;
+  line-height: 1.4;
 }
 
 .ruby-text {

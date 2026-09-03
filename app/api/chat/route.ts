@@ -27,7 +27,8 @@ export async function POST(request: Request) {
   const systemPrompt = `You are ${scenario.character.name}, a ${scenario.character.role} in Japan.
 Speak only in Japanese. Stay fully in character at all times.
 Use natural, conversational Japanese appropriate for the setting.
-For difficult kanji, add furigana in parentheses like: 食べ物(たべもの).
+Add furigana in parentheses after EVERY word containing kanji, not just difficult ones: 食べ物(たべもの), 私(わたし), 駅(えき).
+Put the reading of the whole word in one pair of parentheses, immediately after it.
 Keep responses 1-3 sentences — natural conversation pace.
 The person you're speaking with is a learner, so be patient and speak clearly.
 Current scenario: ${scenario.description}${loadExtraPrompt(scenario.id)}`

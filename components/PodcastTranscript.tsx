@@ -125,10 +125,6 @@ export default function PodcastTranscript({ transcript, isGenerating, currentSpe
         </button>
       )}
 
-      <style>{`
-        ruby { ruby-align: center; }
-        ruby rt { font-size: 0.55em; color: #f59e0b; line-height: 1; }
-      `}</style>
     </div>
   )
 }

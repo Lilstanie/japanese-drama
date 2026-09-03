@@ -58,13 +58,18 @@ export default function JapaneseText({
         if (seg.type === "text") return <span key={i}>{seg.text}</span>
 
         if (seg.type === "ruby") {
+          // <rt> is emitted BEFORE the base on purpose. The ruby box is laid out
+          // as an inline-block whose two lines are centred on each other (see
+          // .ruby-text ruby in globals.css); in that model the reading has to
+          // come first in the DOM to sit on top. Native ruby-align could not be
+          // relied on — it left readings visibly off-centre.
           return (
             <span key={i}>
               <ruby>
-                {seg.kanji}
                 <rt style={rtColor ? { color: rtColor } : undefined}>
                   {seg.reading}
                 </rt>
+                <span className="rb">{seg.kanji}</span>
               </ruby>
               {seg.okurigana}
             </span>
