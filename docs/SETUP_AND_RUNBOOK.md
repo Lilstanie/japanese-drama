@@ -318,9 +318,16 @@ pickers only appear in browser mode, where they mean something.
 
 ### Choosing voices in the app
 
-The home page has a **🎙 声音设置** panel with one dropdown per speaking role.
+Each voice is chosen where it is used, rather than in a global settings panel:
+
+- **Scene** (`/scene/[id]`) — 角色 and 我 dropdowns sit next to the 🎙 AI 语音
+  toggle, and appear only in AI-voice mode. In browser mode the existing
+  Web Speech pickers take their place; each mode shows only what drives it.
+- **Podcast** (`/podcast`) — each speaker's voice sits under that speaker's name
+  in the Kenji / Wei row.
+
 The choice is stored per browser (`jd:v1:voices`) and sent as the `voice` field
-on `POST /api/podcast/tts`, so scene playback and the podcast both follow it.
+on `POST /api/podcast/tts`, so both pages follow it.
 
 | Role | Language | Used by | Default |
 |------|----------|---------|---------|

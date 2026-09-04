@@ -3,7 +3,6 @@
 import Link from "next/link"
 import Image from "next/image"
 import type { Scenario } from "@/lib/types"
-import VoiceSettings from "@/components/VoiceSettings"
 
 const DIFFICULTY_COLORS: Record<string, string> = {
   N5: "bg-green-900/60 text-green-300 border-green-700",
@@ -27,7 +26,6 @@ export default function SceneSelector({ scenarios }: { scenarios: Scenario[] }) 
         <p className="text-lg" style={{ color: "#d4a96a" }}>
           沉浸式情景对话练习 · 中文教练实时辅助
         </p>
-        <VoiceSettings />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">

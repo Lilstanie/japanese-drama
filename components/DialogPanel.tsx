@@ -6,6 +6,7 @@ import { convertToRomaji } from "@/lib/romaji"
 import JapaneseText from "@/components/JapaneseText"
 import { speakLine, cancelSpeech } from "@/lib/tts"
 import { useVoices } from "@/components/VoiceProvider"
+import VoicePicker from "@/components/VoicePicker"
 
 function stripFurigana(text: string): string {
   // Strip both half-width () and full-width （）; also allow ー (long vowel) inside readings
@@ -262,7 +263,14 @@ export default function DialogPanel({
           {useAIVoice ? "🎙 AI 语音" : "💻 浏览器语音"}
         </button>
 
-        {/* Browser voice pickers are meaningless while the AI voice is on. */}
+        {/* Each mode shows only the pickers that drive it. */}
+        {useAIVoice ? (
+          <>
+            <VoicePicker role="character" label="角色" />
+            <VoicePicker role="narrator" label="我" />
+          </>
+        ) : null}
+
         {!useAIVoice && jaVoices.length > 0 && (
           <>
             <VoiceSelect

@@ -8,6 +8,7 @@ import type { PodcastTopic } from "@/lib/podcast-topics"
 import { speakLine, cancelSpeech, initBackgroundAudio, setTTSMode, prefetchLineAudio, toSpeechText } from "@/lib/tts"
 import { useVoices } from "@/components/VoiceProvider"
 import { roleForSpeaker } from "@/lib/voices"
+import VoicePicker from "@/components/VoicePicker"
 import type { TTSMode } from "@/lib/tts"
 import PodcastTranscript from "./PodcastTranscript"
 import PodcastControls from "./PodcastControls"
@@ -344,24 +345,24 @@ export default function PodcastPlayer() {
         </div>
       </div>
 
-      {/* Speakers */}
-      <div className="flex justify-between items-center px-6 py-2.5 border-b flex-shrink-0"
+      {/* Speakers — each with the voice that speaks for them */}
+      <div className="flex justify-between items-start gap-3 px-6 py-2.5 border-b flex-shrink-0 flex-wrap"
         style={{ borderColor: "#3d2010" }}>
         <div className="flex items-center gap-2">
           <div className="relative">
             <span className="text-2xl">🇯🇵</span>
             {kenjiActive && <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full animate-pulse" style={{ background: "#ef4444" }} />}
           </div>
-          <div>
+          <div className="flex flex-col gap-1">
             <div className="text-sm font-bold" style={{ color: "#fca5a5" }}>Kenji</div>
-            <div className="text-xs" style={{ color: "#7a5c38" }}>日本語</div>
+            <VoicePicker role="narrator" label="" />
           </div>
         </div>
-        <div className="text-xs" style={{ color: "#5c3d1e" }}>⟵ 会話 ⟶</div>
+        <div className="text-xs pt-1.5" style={{ color: "#5c3d1e" }}>⟵ 会話 ⟶</div>
         <div className="flex items-center gap-2">
-          <div className="text-right">
+          <div className="flex flex-col gap-1 items-end">
             <div className="text-sm font-bold" style={{ color: "#5eead4" }}>Wei</div>
-            <div className="text-xs" style={{ color: "#7a5c38" }}>中文</div>
+            <VoicePicker role="chinese" label="" />
           </div>
           <div className="relative">
             <span className="text-2xl">🇨🇳</span>
