@@ -329,7 +329,69 @@ katakana dictionary. Add tests alongside; the suite is mutation-checked.
 すみません into すみませ+ん. kuromoji is accurate but ships a 40MB dictionary,
 which is far too heavy for client-side use.
 
-## 10) Voice / TTS Options
+## 10) Podcast for Driving
+
+The podcast is built to be listened to at the wheel, where the screen cannot be
+read or reliably touched.
+
+### Topic rotation
+
+`lib/podcast-plan.ts` decides what plays next as a pure function of the segment
+index, so it is testable without a browser or a model.
+
+- A topic runs for `SEGMENTS_PER_TOPIC` (12) segments, then rotation advances.
+- `buildRotation()` orders topics so consecutive ones come from different
+  categories. It picks from whichever *other* category has the most remaining —
+  taking merely the first different one lets the largest category (7 日常 of 24)
+  run out last and cluster at the end.
+- The topic dropdown chooses where rotation **starts**, not the only topic.
+- 24 topics × 12 segments ≈ 40+ minutes before anything repeats.
+
+### Chinese explanations
+
+Every 6th segment, Wei stops chatting and explains the previous Japanese line in
+Chinese — meaning first, then one word or grammar point, under 50 characters.
+Subtitles are unreadable while driving, so this is the only channel an
+explanation has.
+
+Two constraints encoded in `planSegment()`: only Wei explains (Kenji speaks no
+Chinese, and a Japanese voice reading Chinese sounds wrong), and an explanation
+never opens a topic (there is nothing yet to explain). The offset matters —
+gating on `index % EXPLAIN_EVERY` lands only on Kenji's even indices, so no
+explanation ever plays while the code still reads correctly.
+
+### Car head units (CarPlay / Android Auto)
+
+`lib/media-session.ts` supplies what the car actually renders — it does not draw
+the page. Metadata carries the topic as the title and the speaker as the artist,
+since those are what a car screen shows largest.
+
+| Car control | Action |
+|-------------|--------|
+| Play / Pause | Start or stop the loop |
+| Next track | Skip to the next topic |
+| Previous track / seek back | Replay the current line |
+
+"Previous" replays rather than going back a topic: at the wheel the thing you
+reach for is "say that again", not "rewind ten minutes".
+
+**Not verified on real hardware.** The Media Session calls and metadata are
+implemented and feature-detected, but CarPlay and Android Auto behaviour can
+only be confirmed in a car. Treat the table above as intent until it has been
+driven.
+
+### Known limitation: backgrounding
+
+The podcast generates each line as it plays. If the browser is backgrounded or
+the screen locks, JS timers and network requests are throttled, so generation
+stalls once the buffered line finishes — the currently playing audio completes,
+then it stops. `initBackgroundAudio()` does not change this.
+
+Fixing it properly means pre-generating a whole episode up front so playback is
+a queue of ready audio rather than a live generator. That is the next change if
+locked-screen listening is needed.
+
+## 11) Voice / TTS Options
 
 Provider is chosen by `TTS_PROVIDER`, or auto-detected from whichever key is
 present (ElevenLabs preferred for latency). The client just plays whatever bytes

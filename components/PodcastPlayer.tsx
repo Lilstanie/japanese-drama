@@ -3,7 +3,14 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import Link from "next/link"
 import KatakanaToggle from "@/components/KatakanaToggle"
-import { PODCAST_TOPICS } from "@/lib/podcast-topics"
+import { PODCAST_TOPICS, TOPIC_CATEGORY_LABEL } from "@/lib/podcast-topics"
+import { buildRotation, planSegment, SEGMENTS_PER_TOPIC, type PlannedSegment } from "@/lib/podcast-plan"
+import {
+  setMediaSessionHandlers,
+  clearMediaSession,
+  updateMediaSessionMetadata,
+  setMediaSessionPlaybackState,
+} from "@/lib/media-session"
 import type { PodcastTopic } from "@/lib/podcast-topics"
 import { speakLine, cancelSpeech, initBackgroundAudio, setTTSMode, prefetchLineAudio, toSpeechText } from "@/lib/tts"
 import { useVoices } from "@/components/VoiceProvider"
@@ -34,7 +41,8 @@ async function fetchTurn(
   topic: PodcastTopic,
   difficulty: Difficulty,
   speaker: "A" | "B",
-  history: HistoryEntry[]
+  history: HistoryEntry[],
+  kind: "dialogue" | "explain" = "dialogue"
 ): Promise<string> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TURN_TIMEOUT_MS)
@@ -42,7 +50,9 @@ async function fetchTurn(
     const res = await fetch("/api/podcast/turn", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ topic: topic.label, difficulty, seed: topic.seed, speaker, history }),
+      body: JSON.stringify({
+        topic: topic.label, difficulty, seed: topic.seed, speaker, history, kind,
+      }),
       signal: controller.signal,
     })
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
@@ -64,10 +74,11 @@ async function fetchWithRetry(
   topic: PodcastTopic,
   difficulty: Difficulty,
   speaker: "A" | "B",
-  history: HistoryEntry[]
+  history: HistoryEntry[],
+  kind: "dialogue" | "explain" = "dialogue"
 ): Promise<string | null> {
-  try { return await fetchTurn(topic, difficulty, speaker, history) } catch {}
-  try { return await fetchTurn(topic, difficulty, speaker, history) } catch {}
+  try { return await fetchTurn(topic, difficulty, speaker, history, kind) } catch {}
+  try { return await fetchTurn(topic, difficulty, speaker, history, kind) } catch {}
   return null
 }
 
@@ -115,6 +126,15 @@ export default function PodcastPlayer() {
   const ttsModeRef = useRef<TTSMode>("ai")
   // Resolver for the inter-turn gap — calling it skips the wait
   const skipGapRef = useRef<(() => void) | null>(null)
+  // Rotation order and playhead. The loop reads these, so they are refs; the
+  // rotation is rebuilt whenever the starting topic changes.
+  const rotationRef = useRef(buildRotation(PODCAST_TOPICS))
+  const segmentIndexRef = useRef(0)
+  const [nowTopic, setNowTopic] = useState(rotationRef.current[0])
+  // Media Session handlers are registered once, before these functions exist;
+  // refs let that single registration reach the current implementations.
+  const startLoopRef = useRef<(() => void) | null>(null)
+  const nextTopicRef = useRef<(() => void) | null>(null)
 
   useEffect(() => { topicRef.current = topic }, [topic])
   useEffect(() => { difficultyRef.current = difficulty }, [difficulty])
@@ -122,6 +142,28 @@ export default function PodcastPlayer() {
   useEffect(() => { speedRef.current = speed }, [speed])
   useEffect(() => { volumeRef.current = volume }, [volume])
   useEffect(() => { initBackgroundAudio() }, [])
+
+  // Car head units render none of this page — they read Media Session metadata
+  // and send button presses back through these handlers.
+  useEffect(() => {
+    setMediaSessionHandlers({
+      onPlay: () => { if (!isPlayingRef.current) startLoopRef.current?.() },
+      onPause: () => {
+        isPlayingRef.current = false
+        setIsPlaying(false)
+        setIsGenerating(false)
+        cancelSpeech()
+        skipGapRef.current?.()
+      },
+      onNextTopic: () => nextTopicRef.current?.(),
+      onReplay: () => { cancelSpeech(); skipGapRef.current?.() },
+    })
+    return clearMediaSession
+  }, [])
+
+  useEffect(() => {
+    setMediaSessionPlaybackState(isPlaying ? "playing" : "paused")
+  }, [isPlaying])
 
   // Stop everything when navigating away — prevents audio playing in background
   useEffect(() => {
@@ -154,11 +196,12 @@ export default function PodcastPlayer() {
     // nextLinePrefetch resolves with the NEXT turn's text *and* its audio.
     // Both are started while the current line is still speaking, so neither the
     // model call nor the (slower) speech synthesis sits on the critical path.
-    type Prefetched = { text: string; audio: Promise<Blob | null> } | null
+    type Prefetched = { text: string; audio: Promise<Blob | null>; plan: PlannedSegment } | null
     let nextLinePrefetch: Promise<Prefetched> | null = null
 
     while (isPlayingRef.current && loopGenRef.current === gen) {
-      const speaker = currentSpeakerRef.current
+      const plan = planSegment(segmentIndexRef.current, rotationRef.current)
+      const speaker = plan.speaker
 
       let line: string | null = null
       // Audio for this line, if it was fetched ahead of time.
@@ -175,8 +218,20 @@ export default function PodcastPlayer() {
       } else {
         // First turn or after a reset — nothing is warm yet, so this one waits.
         setIsGenerating(true)
-        line = await fetchWithRetry(topicRef.current, difficultyRef.current, speaker, historyRef.current)
+        line = await fetchWithRetry(
+          plan.topic, difficultyRef.current, speaker, historyRef.current, plan.kind
+        )
         setIsGenerating(false)
+      }
+
+      // Announce the topic to the car before its first line plays.
+      if (plan.startsTopic) {
+        setNowTopic(plan.topic)
+        updateMediaSessionMetadata({
+          topicLabel: plan.topic.label,
+          topicLabelZh: plan.topic.labelZh,
+          speakerLabel: speaker === "A" ? "Kenji · 日本語" : "Wei · 中文",
+        })
       }
 
       if (!isPlayingRef.current || loopGenRef.current !== gen) break
@@ -196,22 +251,25 @@ export default function PodcastPlayer() {
         newLine,
       ])
 
-      // Kick off next speaker's fetch + gap in parallel with speaking current line
-      const nextSpeaker: "A" | "B" = speaker === "A" ? "B" : "A"
+      // Kick off the next segment's fetch + gap in parallel with the current line
+      const nextPlan = planSegment(segmentIndexRef.current + 1, rotationRef.current)
+      const nextSpeaker = nextPlan.speaker
       const snapHistory = historyRef.current
-      const snapTopic = topicRef.current
       const snapDiff = difficultyRef.current
       const myGen = gen
 
       nextLinePrefetch = gap(GAP_MS).then(async () => {
         if (!isPlayingRef.current || loopGenRef.current !== myGen) return null
-        const text = await fetchWithRetry(snapTopic, snapDiff, nextSpeaker, snapHistory)
+        const text = await fetchWithRetry(
+          nextPlan.topic, snapDiff, nextSpeaker, snapHistory, nextPlan.kind
+        )
         if (!text?.trim()) return null
         if (!isPlayingRef.current || loopGenRef.current !== myGen) return null
         // Start synthesis immediately and do NOT await it — it runs while the
         // current line is still playing, which is the whole point.
         return {
           text,
+          plan: nextPlan,
           audio: prefetchLineAudio(text, nextSpeaker, voiceRef.current(roleForSpeaker(nextSpeaker))),
         }
       })
@@ -230,7 +288,8 @@ export default function PodcastPlayer() {
 
       if (!isPlayingRef.current || loopGenRef.current !== gen) break
 
-      // Switch speaker — pre-fetch (running in background) will land on the new speaker
+      // Advance the playhead; the planner derives speaker and topic from it.
+      segmentIndexRef.current += 1
       currentSpeakerRef.current = nextSpeaker
       setCurrentSpeaker(nextSpeaker)
     }
@@ -252,6 +311,10 @@ export default function PodcastPlayer() {
     historyRef.current = []
     currentSpeakerRef.current = "A"
     setCurrentSpeaker("A")
+    // Without this the playhead keeps its old position, so a reset would resume
+    // mid-rotation on an unrelated topic.
+    segmentIndexRef.current = 0
+    setNowTopic(rotationRef.current[0])
     setTranscript([])
     setIsGenerating(false)
     setErrorMsg(null)
@@ -261,10 +324,33 @@ export default function PodcastPlayer() {
   function handlePause() { isPlayingRef.current = false; setIsPlaying(false); setIsGenerating(false); cancelSpeech(); skipGapRef.current?.() }
   function handleSkip() { cancelSpeech(); skipGapRef.current?.() }
 
+  /** Jump to the start of the next topic in the rotation. */
+  const handleNextTopic = useCallback(() => {
+    const per = SEGMENTS_PER_TOPIC
+    segmentIndexRef.current = (Math.floor(segmentIndexRef.current / per) + 1) * per
+    currentSpeakerRef.current = "A"
+    setCurrentSpeaker("A")
+    historyRef.current = []   // a new topic should not inherit the old thread
+    cancelSpeech()
+    skipGapRef.current?.()
+  }, [])
+
+  // Media Session registered its handlers once, before these functions existed;
+  // keep the refs pointing at the current ones on every render.
+  useEffect(() => {
+    startLoopRef.current = startLoop
+    nextTopicRef.current = handleNextTopic
+  })
+
   function handleTopicChange(t: PodcastTopic) {
     const was = isPlayingRef.current
     reset()
     setTopic(t); topicRef.current = t
+    // Rebuild the rotation to start here, so the picker chooses the opening
+    // topic rather than the only one.
+    rotationRef.current = buildRotation(PODCAST_TOPICS, t.id)
+    segmentIndexRef.current = 0
+    setNowTopic(rotationRef.current[0])
     if (was) startLoop()
   }
 
@@ -323,7 +409,7 @@ export default function PodcastPlayer() {
       <div className="flex flex-wrap gap-3 items-center px-4 py-2.5 border-b flex-shrink-0"
         style={{ borderColor: "#3d2010" }}>
         <div className="flex items-center gap-2">
-          <span className="text-xs" style={{ color: "#7a5c38" }}>トピック</span>
+          <span className="text-xs" style={{ color: "#7a5c38" }}>开始话题</span>
           <select className="text-sm rounded-lg px-2 py-1 border"
             style={{ background: "#261508", color: "#f0d5a0", borderColor: "#5c3d1e" }}
             value={topic.id}
@@ -331,8 +417,20 @@ export default function PodcastPlayer() {
               const found = PODCAST_TOPICS.find(t => t.id === e.target.value)
               if (found) handleTopicChange(found)
             }}>
-            {PODCAST_TOPICS.map(t => <option key={t.id} value={t.id}>{t.emoji} {t.label}</option>)}
+            {PODCAST_TOPICS.map(t => (
+              <option key={t.id} value={t.id}>
+                {t.emoji} {t.labelZh} · {TOPIC_CATEGORY_LABEL[t.category]}
+              </option>
+            ))}
           </select>
+          <button
+            onClick={handleNextTopic}
+            title="跳到下一个话题"
+            className="text-xs px-2 py-1 rounded-lg border transition-colors"
+            style={{ background: "transparent", color: "#a07850", borderColor: "#3d2010" }}
+          >
+            下一个 ⏭
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs" style={{ color: "#7a5c38" }}>難易度</span>
@@ -358,7 +456,14 @@ export default function PodcastPlayer() {
             <VoicePicker role="narrator" label="" />
           </div>
         </div>
-        <div className="text-xs pt-1.5" style={{ color: "#5c3d1e" }}>⟵ 会話 ⟶</div>
+        <div className="flex flex-col items-center gap-0.5 pt-0.5">
+          <div className="text-xs" style={{ color: "#5c3d1e" }}>⟵ 会話 ⟶</div>
+          {nowTopic ? (
+            <div className="text-xs whitespace-nowrap" style={{ color: "#a07850" }}>
+              {nowTopic.emoji} {nowTopic.labelZh}
+            </div>
+          ) : null}
+        </div>
         <div className="flex items-center gap-2">
           <div className="flex flex-col gap-1 items-end">
             <div className="text-sm font-bold" style={{ color: "#5eead4" }}>Wei</div>

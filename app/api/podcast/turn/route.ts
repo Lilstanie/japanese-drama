@@ -20,20 +20,41 @@ const SYSTEM_B = (topic: string, difficulty: string, seed: string) =>
 背景：${seed}
 难度参考：${difficulty}`
 
+/**
+ * Wei stepping out of the conversation to explain the Japanese just spoken.
+ *
+ * This is the only way a learner gets an explanation while driving — subtitles
+ * are unreadable at the wheel — so it names the meaning and one concrete point,
+ * and stays short enough not to derail the conversation it interrupts.
+ */
+const SYSTEM_EXPLAIN = (difficulty: string) =>
+  `你是Wei，正在和日本朋友Kenji聊天。现在请你短暂地停一下，用中文向听众解释Kenji刚才说的那句日语。
+
+只用中文。50字以内。先说这句话的意思，再点出一个词或语法点。
+说话像朋友随口讲解，不要像教科书，不要列条目，不要加"Wei:"前缀。
+不要重复整句日语原文，最多引用一两个关键词。
+学习者水平：${difficulty}`
+
 export async function POST(request: Request) {
-  const { topic, difficulty, seed, speaker, history } = (await request.json()) as {
+  const { topic, difficulty, seed, speaker, history, kind } = (await request.json()) as {
     topic: string
     difficulty: string
     seed: string
     speaker: "A" | "B"
     history: { speaker: "A" | "B"; content: string }[]
+    kind?: "dialogue" | "explain"
   }
 
   // Built per request, not at module scope: Next evaluates route modules while
   // collecting page data at build time, where no key exists.
   const client = createAIClient()
 
-  const system = speaker === "A" ? SYSTEM_A(topic, difficulty, seed) : SYSTEM_B(topic, difficulty, seed)
+  const system =
+    kind === "explain"
+      ? SYSTEM_EXPLAIN(difficulty)
+      : speaker === "A"
+        ? SYSTEM_A(topic, difficulty, seed)
+        : SYSTEM_B(topic, difficulty, seed)
 
   const recentHistory = history.slice(-8)
   const formatted = recentHistory

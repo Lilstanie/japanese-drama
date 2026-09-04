@@ -8,7 +8,7 @@
  *   elevenlabs — multilingual, ~1s, MP3
  *   camb       — Japanese-native voices, ~5s warm / much slower cold, WAV
  *
- * See docs/SETUP_AND_RUNBOOK.md §10.
+ * See docs/SETUP_AND_RUNBOOK.md §11.
  */
 
 import { resolveVoice, voiceByName } from "@/lib/voices"
