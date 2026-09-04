@@ -42,7 +42,8 @@ async function fetchTurn(
   difficulty: Difficulty,
   speaker: "A" | "B",
   history: HistoryEntry[],
-  kind: "dialogue" | "explain" = "dialogue"
+  kind: "dialogue" | "explain" = "dialogue",
+  move?: string
 ): Promise<string> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TURN_TIMEOUT_MS)
@@ -51,7 +52,7 @@ async function fetchTurn(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        topic: topic.label, difficulty, seed: topic.seed, speaker, history, kind,
+        topic: topic.label, difficulty, seed: topic.seed, speaker, history, kind, move,
       }),
       signal: controller.signal,
     })
@@ -75,10 +76,11 @@ async function fetchWithRetry(
   difficulty: Difficulty,
   speaker: "A" | "B",
   history: HistoryEntry[],
-  kind: "dialogue" | "explain" = "dialogue"
+  kind: "dialogue" | "explain" = "dialogue",
+  move?: string
 ): Promise<string | null> {
-  try { return await fetchTurn(topic, difficulty, speaker, history, kind) } catch {}
-  try { return await fetchTurn(topic, difficulty, speaker, history, kind) } catch {}
+  try { return await fetchTurn(topic, difficulty, speaker, history, kind, move) } catch {}
+  try { return await fetchTurn(topic, difficulty, speaker, history, kind, move) } catch {}
   return null
 }
 
@@ -219,7 +221,7 @@ export default function PodcastPlayer() {
         // First turn or after a reset — nothing is warm yet, so this one waits.
         setIsGenerating(true)
         line = await fetchWithRetry(
-          plan.topic, difficultyRef.current, speaker, historyRef.current, plan.kind
+          plan.topic, difficultyRef.current, speaker, historyRef.current, plan.kind, plan.move
         )
         setIsGenerating(false)
       }
@@ -261,7 +263,7 @@ export default function PodcastPlayer() {
       nextLinePrefetch = gap(GAP_MS).then(async () => {
         if (!isPlayingRef.current || loopGenRef.current !== myGen) return null
         const text = await fetchWithRetry(
-          nextPlan.topic, snapDiff, nextSpeaker, snapHistory, nextPlan.kind
+          nextPlan.topic, snapDiff, nextSpeaker, snapHistory, nextPlan.kind, nextPlan.move
         )
         if (!text?.trim()) return null
         if (!isPlayingRef.current || loopGenRef.current !== myGen) return null

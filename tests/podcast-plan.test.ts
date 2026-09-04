@@ -108,6 +108,42 @@ describe("Chinese explanations", () => {
   })
 })
 
+describe("conversation moves", () => {
+  test("every turn is given a job", () => {
+    // Without one the only instruction is "be natural and short", and the
+    // conversation collapses into 〜してみてね / 感想を聞かせて forever.
+    for (let i = 0; i < 40; i++) {
+      assert.ok(plan(i).move, `segment ${i} has no move`)
+    }
+  })
+
+  test("a topic opens by opening and ends by closing", () => {
+    assert.equal(plan(0).move, "open")
+    assert.equal(plan(SEGMENTS_PER_TOPIC - 1).move, "close")
+    assert.equal(plan(SEGMENTS_PER_TOPIC).move, "open")
+  })
+
+  test("includes moves that break agreement, not just extend it", () => {
+    // Endless agreement is exactly how the loop starts; a topic needs at least
+    // one turn whose job is to push back or change direction.
+    const moves = Array.from({ length: SEGMENTS_PER_TOPIC }, (_, i) => plan(i).move)
+    assert.ok(moves.includes("disagree"), "no disagreement in a whole topic")
+    assert.ok(moves.includes("shift"), "no change of angle in a whole topic")
+  })
+
+  test("does not repeat the same move twice in a row", () => {
+    for (let i = 1; i < 40; i++) {
+      assert.notEqual(plan(i).move, plan(i - 1).move, `segments ${i - 1}/${i}`)
+    }
+  })
+
+  test("asks often enough to keep the other speaker involved", () => {
+    const asks = Array.from({ length: SEGMENTS_PER_TOPIC }, (_, i) => plan(i).move)
+      .filter((m) => m === "ask").length
+    assert.ok(asks >= 2, `only ${asks} questions per topic`)
+  })
+})
+
 describe("topics", () => {
   test("every topic has a concrete scene to work from", () => {
     // A vague seed produces vague small talk, which is what makes a generated

@@ -15,6 +15,51 @@ import {
 
 export type SegmentKind = "dialogue" | "explain"
 
+/**
+ * What a turn is *for*.
+ *
+ * Without this the only instruction is "be natural and short", and natural +
+ * short + agreeable collapses into Japanese closure formulas — 〜してみてね,
+ * 楽しみにしてる, 感想を聞かせて. Those are always a valid reply, so once both
+ * speakers enter that mode neither has any reason to leave, and the
+ * conversation loops while every individual line still looks fine.
+ *
+ * Giving each turn a job is what keeps it moving. This is not a context-window
+ * problem: the looping happens well inside the 8 turns of history the model
+ * already sees.
+ */
+export type ConversationMove =
+  | "open"      // set the scene with one concrete hook
+  | "ask"       // ask the other something specific
+  | "detail"    // add a concrete fact, place, number or name
+  | "contrast"  // compare Japan and China
+  | "anecdote"  // tell a short personal story
+  | "disagree"  // push back, or admit a dislike
+  | "shift"     // move to a neighbouring angle of the topic
+  | "close"     // land a small conclusion before the topic changes
+
+/**
+ * The arc of one topic: open, develop, deepen, then land it.
+ *
+ * Fixed rather than random so it is deterministic and testable, and so the same
+ * topic does not open the same way every rotation — the move depends on
+ * position within the topic, and the topics themselves rotate.
+ */
+const MOVE_CYCLE: ConversationMove[] = [
+  "open",     // 0
+  "ask",      // 1
+  "detail",   // 2
+  "contrast", // 3
+  "anecdote", // 4
+  "ask",      // 5
+  "disagree", // 6
+  "detail",   // 7
+  "shift",    // 8
+  "anecdote", // 9
+  "ask",      // 10
+  "close",    // 11
+]
+
 export type PlannedSegment = {
   index: number
   topic: PodcastTopic
@@ -24,6 +69,8 @@ export type PlannedSegment = {
   lang: "ja" | "zh"
   /** True on the first segment of a topic, so the UI can announce the change. */
   startsTopic: boolean
+  /** What this turn should accomplish — see ConversationMove. */
+  move: ConversationMove
 }
 
 /** Segments spent on one topic before moving on. ~12 is a few minutes of audio. */
@@ -111,13 +158,16 @@ export function planSegment(
       ? "explain"
       : "dialogue"
 
+  const positionInTopic = index % SEGMENTS_PER_TOPIC
+
   return {
     index,
     topic,
     speaker,
     kind,
     lang: speaker === "A" ? "ja" : "zh",
-    startsTopic: index % SEGMENTS_PER_TOPIC === 0,
+    startsTopic: positionInTopic === 0,
+    move: MOVE_CYCLE[positionInTopic % MOVE_CYCLE.length]!,
   }
 }
 

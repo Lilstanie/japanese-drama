@@ -360,6 +360,39 @@ never opens a topic (there is nothing yet to explain). The offset matters —
 gating on `index % EXPLAIN_EVERY` lands only on Kenji's even indices, so no
 explanation ever plays while the code still reads correctly.
 
+### Why the conversation used to loop
+
+A real transcript degenerated into both speakers trading 「感想を聞かせて」/
+「等我去了告诉你」 for eight turns. **This was not a context-window problem** —
+the model sees 8 turns of history, and the whole loop happened inside it. It
+could see itself repeating.
+
+The cause was that nothing told it to advance. The prompt said only: speak
+Japanese, be casual, 1-2 sentences. Natural + short + agreeable converges on
+Japanese closure formulas (〜してみてね, 楽しみにしてる, 感想を聞かせて), which
+are *always* a valid reply — a stable attractor neither speaker has a reason to
+leave, while every individual line still reads fine.
+
+Three changes, in order of effect:
+
+1. **Every turn has a job.** `planSegment()` assigns a `ConversationMove` —
+   open / ask / detail / contrast / anecdote / disagree / shift / close — cycled
+   across a topic so it opens, develops, deepens, then lands. `disagree` is the
+   important one: endless agreement is how the loop starts.
+2. **The closure formulas are banned outright** in the prompt, along with
+   restating what the other speaker just said.
+3. **`frequency_penalty` 0.6 / `presence_penalty` 0.5**, which the sampler
+   applies to exactly the phrase-level repetition at issue.
+
+Measured on the same topic that looped, the conversation now produces concrete
+detail (名古屋の味噌かつ丼, 680円, 道頓堀), a real disagreement
+(「味が濃すぎてちょっと食べきれなかった」) and personal anecdotes, with no
+repeated turns.
+
+Note for tuning: an explanation turn must NOT receive the full conversation plus
+"say your next line" — that instruction beats the system prompt and it carries
+on chatting. It gets only the line being explained.
+
 ### Car head units (CarPlay / Android Auto)
 
 `lib/media-session.ts` supplies what the car actually renders — it does not draw
