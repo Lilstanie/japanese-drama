@@ -84,6 +84,57 @@ describe("okurigana attached to a one-kana reading", () => {
   })
 })
 
+describe("word segmentation", () => {
+  test("separates a kana verb from the noun before it", () => {
+    // Regression: 何かお手伝いできることはありますか came out as
+    // "nani kao tetsuda idekirukotohaarimasuka".
+    assert.equal(
+      convertToRomaji("何(なに)かお手伝(てつだ)いできることはありますか？"),
+      "nani ka otetsudai dekiru koto wa arimasu ka?"
+    )
+  })
+
+  test("a word wins over a particle that starts it", () => {
+    // で is a particle, but です and できる are words — matching the particle
+    // first produced "de su" and "de kiru".
+    assert.equal(convertToRomaji("これはペンです。"), "kore wa pen desu.")
+    assert.equal(convertToRomaji("できる"), "dekiru")
+  })
+
+  test("but a particle wins directly after a content word", () => {
+    // 今日はいい must not be read as 今日 + はい + い.
+    assert.equal(
+      convertToRomaji("今日(きょう)はいい天気(てんき)です。"),
+      "kyou wa ii tenki desu."
+    )
+  })
+
+  test("standalone はい is still the word, not a particle", () => {
+    assert.equal(convertToRomaji("はい"), "hai")
+  })
+
+  test("sentence-final particles do not match mid-word", () => {
+    // か begins かけて; it is only a particle at the end of a clause.
+    assert.equal(convertToRomaji("足(あし)にかけて"), "ashi ni kakete")
+    assert.equal(convertToRomaji("行(い)きませんか"), "ikimasen ka")
+  })
+
+  test("honorific prefixes attach to the word after them", () => {
+    assert.equal(convertToRomaji("お手伝(てつだ)い"), "otetsudai")
+    assert.equal(convertToRomaji("何(なに)をお探(さが)しですか。"), "nani o osagashi desu ka.")
+  })
+
+  test("a word annotated in two pieces is joined", () => {
+    // The model sometimes writes 食(た)べ物(もの) rather than 食べ物(たべもの).
+    assert.equal(convertToRomaji("食(た)べ物(もの)"), "tabemono")
+  })
+
+  test("an unknown word stays in one piece", () => {
+    // Better a single unfamiliar token than a string of stray syllables.
+    assert.equal(convertToRomaji("ぬるぬる"), "nurunuru")
+  })
+})
+
 describe("full sentences", () => {
   test("a scene line reads as spaced, fully-converted romaji", () => {
     assert.equal(

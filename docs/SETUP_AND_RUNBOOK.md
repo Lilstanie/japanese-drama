@@ -255,7 +255,37 @@ Provider errors no longer leak into the dialogue. `friendlyAIError()` maps
 status codes to a readable note (rate limit, bad key, retired model) and logs
 the raw error server-side.
 
-## 8) Voice / TTS Options
+## 8) Romaji Word Segmentation
+
+`lib/romaji.ts` has to decide where words end, because Japanese is written
+without spaces and unsegmented romaji is unreadable. Two shortcuts avoid needing
+a morphological analyser:
+
+- **Kanji boundaries come from the furigana markup.** The model annotates whole
+  words, so 食べ物(たべもの) is one unit by construction — and the reading is
+  what makes the kanji convertible at all.
+- **Katakana runs** are already segmented by the loanword dictionary.
+
+That leaves hiragana runs, split by a lexicon (`KANA_WORDS`, `PARTICLES`).
+Rules worth knowing before editing it:
+
+| Rule | Why |
+|------|-----|
+| Words match before particles | で is a particle but です/できる are words |
+| Except directly after a content word, for は が を に へ | 今日はいい is 今日+は+いい, not 今日+はい+い |
+| か ね よ な わ match only at the end of a run | か is a particle in しませんか, a syllable in かけて |
+| One-kana readings absorb what follows | それ is a verb stem: 曲(ま)がって → magatte |
+| …but stop at `OKURIGANA_STOP` | ください is its own word; いました is inflection |
+| Unmatched kana stay in one chunk | An unfamiliar word beats stray syllables |
+
+To improve coverage, add to `KANA_WORDS` — the same curation model as the
+katakana dictionary. Add tests alongside; the suite is mutation-checked.
+
+**TinySegmenter was evaluated and rejected**: it split ください into く+ださい and
+すみません into すみませ+ん. kuromoji is accurate but ships a 40MB dictionary,
+which is far too heavy for client-side use.
+
+## 9) Voice / TTS Options
 
 Provider is chosen by `TTS_PROVIDER`, or auto-detected from whichever key is
 present (ElevenLabs preferred for latency). The client just plays whatever bytes

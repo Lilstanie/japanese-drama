@@ -48,19 +48,130 @@ const COMMON_READINGS: Record<string, string> = {
 }
 
 /**
- * Particles are split off so a hiragana tail does not fuse into the word before
- * it ("wo kudasai", not "wokudasai").
+ * Word segmentation lexicon.
+ *
+ * Japanese is written without spaces, so producing readable romaji means
+ * deciding where words end. Two shortcuts make that tractable here rather than
+ * needing a morphological analyser:
+ *
+ *   - Kanji word boundaries come free from the furigana markup, since the model
+ *     annotates whole words: 食べ物(たべもの) is one unit by construction.
+ *   - Katakana runs are already segmented by the loanword dictionary.
+ *
+ * That leaves only hiragana runs, which this lexicon splits. A run is scanned
+ * left to right, matching KANA_WORDS *before* PARTICLES at each position — で is
+ * a particle, but できる is a word, and the longer word has to win.
+ *
+ * Anything unmatched is emitted as one chunk rather than guessed at, so an
+ * unknown word stays joined instead of being shredded into syllables.
+ *
+ * (Evaluated TinySegmenter for this and rejected it: it split ください into
+ * く+ださい and すみません into すみませ+ん.)
+ */
+const KANA_WORDS = new Set([
+  // Copula and polite auxiliaries — conventionally their own word in romaji
+  "です", "でした", "ではない", "じゃない", "ください", "ませんか",
+  "ましょう", "でしょう", "だろう", "ある", "あります", "ありました",
+  "ありません", "いる", "います", "いました", "いません",
+  // Very common kana verbs
+  "する", "します", "しました", "しません", "して", "した",
+  "できる", "できます", "できません", "できた",
+  "なる", "なります", "なりました", "いく", "いきます", "くる", "きます",
+  "みる", "みます", "いう", "いいます", "おもう", "おもいます",
+  "わかる", "わかります", "わかりました", "しる", "しっています",
+  "もらう", "もらいます", "あげる", "あげます", "くれる", "くれます",
+  "つかう", "つかいます", "まつ", "まちます", "のむ", "のみます",
+  "たべる", "たべます", "かう", "かいます", "いれる", "いれます",
+  // Adjectives and adverbs
+  "いい", "よい", "よく", "わるい", "おおきい", "ちいさい", "たかい",
+  "やすい", "あたらしい", "ふるい", "はやい", "おそい", "おいしい",
+  "たのしい", "うれしい", "むずかしい", "やさしい", "ちかい", "とおい",
+  "とても", "ちょっと", "すこし", "たくさん", "もう", "まだ", "すぐ",
+  "ゆっくり", "いつも", "ときどき", "たいてい", "ぜんぶ", "みんな",
+  "いちばん", "もっと", "あまり", "ぜんぜん", "だいたい", "きっと",
+  // Pronouns, demonstratives, formal nouns
+  "これ", "それ", "あれ", "どれ", "この", "その", "あの", "どの",
+  "ここ", "そこ", "あそこ", "どこ", "こんな", "そんな", "あんな", "どんな",
+  "こちら", "そちら", "あちら", "どちら", "わたし", "あなた",
+  "こと", "もの", "とき", "ところ", "ひと", "かた", "ため", "つもり",
+  // Greetings and set phrases
+  "はい", "いいえ", "すみません", "ありがとう", "ございます",
+  "おねがい", "おねがいします", "いらっしゃいませ", "ようこそ",
+  "こんにちは", "こんばんは", "おはよう", "さようなら", "しつれいします",
+  "だいじょうぶ", "もちろん", "ほんとう", "たぶん", "やっぱり",
+  // Connectives
+  "そして", "でも", "だから", "しかし", "それから", "それで", "また",
+  "じゃあ", "では", "ですが", "ですから", "なので",
+])
+
+/**
+ * Grammatical particles. Split off the word they follow, and — for は, へ and
+ * を — pronounced differently from how they are spelled.
  */
 const PARTICLES = new Set([
-  "は", "が", "を", "に", "へ", "で", "と", "も", "の", "や", "か", "ね", "よ",
-  "から", "まで", "より", "など", "でも", "けど", "のに", "ので", "ばかり",
+  "は", "が", "を", "に", "へ", "で", "と", "も", "の", "や",
+  "から", "まで", "より", "など", "けど", "ので", "のに",
+  "ばかり", "だけ", "しか", "ぐらい", "くらい", "ずつ", "とか", "には",
+  "では", "とは", "にも", "でも",
+])
+
+/**
+ * Sentence-final particles, matched only at the end of a run. か is a particle
+ * in 「しませんか」 but the first syllable of a word in 「かけて」, and only
+ * position tells them apart.
+ */
+const FINAL_PARTICLES = new Set(["か", "ね", "よ", "な", "わ", "かな", "よね"])
+
+/**
+ * Particles that beat a longer word when they directly follow a content word.
+ *
+ * Only one-sided ambiguities belong here. 今日はいい must read 今日 + は + いい
+ * rather than 今日 + はい + い, and はい almost never follows a noun. で is
+ * excluded on purpose: です and できる follow content words constantly, so
+ * preferring the particle there would produce "de su" and "de kiru".
+ */
+const LEADING_PARTICLES = new Set(["は", "が", "を", "に", "へ"])
+
+/**
+ * Particles that always end a word, used when absorbing okurigana after a
+ * one-kana stem. が is absent on purpose: it is the okurigana of 曲がる far more
+ * often than it is the subject particle in that position.
+ */
+const HARD_BOUNDARY = new Set(["は", "を", "の", "へ", "も", "と", "か", "ね", "よ"])
+
+/** No Japanese inflection runs longer than this; a cap stops runaway merging. */
+const MAX_OKURIGANA = 6
+
+/**
+ * Auxiliaries that end a verb's okurigana and start their own word.
+ *
+ * Distinguished from inflections that merely look like words: ください in
+ * 曲がってください is a separate word, but いました in 会いました is the verb's
+ * own past tense, not the verb いる.
+ */
+const OKURIGANA_STOP = ["ください", "くださる", "です", "でした", "ですか"]
+
+/**
+ * Honorific prefixes attach to the word *after* them (お手伝い → otetsudai),
+ * unlike everything else here.
+ */
+const PREFIXES = new Set(["お", "ご"])
+
+/**
+ * Kana that commonly serve as okurigana. Used to decide whether hiragana right
+ * after a kanji belongs to that word (探し → sagashi) or is a particle
+ * starting a new one (足に → ashi ni). Particles are excluded on purpose.
+ */
+const OKURIGANA = new Set([
+  "い", "う", "え", "き", "く", "け", "こ", "し", "す", "せ", "そ",
+  "ち", "つ", "っ", "て", "と", "ば", "び", "べ", "ま", "み", "む",
+  "め", "り", "る", "れ", "ろ", "げ", "ぎ", "ぐ", "ら", "た", "じ", "ず",
 ])
 
 /**
  * Particles whose pronunciation differs from their spelling. は is read "wa"
- * and へ "e" only when used as particles — inside a word (はい, へや) they keep
- * their normal sound, which is why this is applied to standalone particle
- * tokens rather than by string replacement.
+ * and へ "e" only as particles — inside a word (はい, へや) they keep their
+ * normal sound, so this applies to particle tokens, not by string replacement.
  */
 const PARTICLE_ROMAJI: Record<string, string> = {
   "は": "wa",
@@ -69,7 +180,7 @@ const PARTICLE_ROMAJI: Record<string, string> = {
 }
 
 /** Auxiliaries conventionally written as their own word in romaji. */
-const TRAILING_WORDS = ["ください", "くださる"]
+const TRAILING_WORDS = ["ください", "ください。"]
 
 const PUNCTUATION: Record<string, string> = {
   "。": ".", "、": ",", "！": "!", "？": "?", "…": "...",
@@ -100,25 +211,120 @@ function tokenToRomaji(kana: string, isStandaloneParticle: boolean): string[] {
   return [kanaToRomaji(kana)]
 }
 
-/**
- * Split a hiragana run so leading particles become their own tokens.
- *
- * Deliberately conservative and non-recursive: 「です」 begins with で, which is
- * a particle, but splitting it would give "de su". A particle is only split off
- * when what follows is long enough to be a word in its own right.
- */
-function splitParticles(run: string): string[] {
-  if (PARTICLES.has(run)) return [run]
-
-  for (const len of [2, 1]) {
-    const head = run.slice(0, len)
-    const rest = run.slice(len)
-    if (PARTICLES.has(head) && rest.length >= 2) return [head, rest]
+/** Longest lexicon or particle match starting at `i`, or null. */
+function matchAt(run: string, i: number): { word: string; particle: boolean } | null {
+  // Words are tried before particles at every position: で is a particle but
+  // できる is a word, and matching the particle first would shred the verb.
+  for (let len = Math.min(8, run.length - i); len >= 1; len--) {
+    const candidate = run.slice(i, i + len)
+    if (KANA_WORDS.has(candidate)) return { word: candidate, particle: false }
   }
-  return [run]
+  for (let len = Math.min(4, run.length - i); len >= 1; len--) {
+    const candidate = run.slice(i, i + len)
+    if (PARTICLES.has(candidate)) return { word: candidate, particle: true }
+    if (FINAL_PARTICLES.has(candidate) && i + len === run.length) {
+      return { word: candidate, particle: true }
+    }
+  }
+  return null
 }
 
-/** Look up a bare kanji run, longest match first. */
+type KanaToken = { kana: string; particle: boolean; prefix?: boolean }
+
+/**
+ * Split a hiragana run into words.
+ *
+ * `okuriganaLimit` is how many leading characters may still belong to the
+ * preceding word — see attachableOkurigana().
+ */
+function segmentKana(
+  run: string,
+  okuriganaLimit: number,
+  followsContent = false
+): KanaToken[] {
+  const tokens: KanaToken[] = []
+  let i = okuriganaLimit
+
+  while (i < run.length) {
+    // Right after a content word a leading particle wins over any longer word
+    // that happens to start with it: 今日はいい is 今日 + は + いい, not
+    // 今日 + はい + い. Standalone はい is unaffected, having no word before it.
+    let m = matchAt(run, i)
+    if (i === okuriganaLimit && followsContent) {
+      const head = run[i]
+      if (LEADING_PARTICLES.has(head)) m = { word: head, particle: true }
+    }
+
+    if (m) {
+      if (PREFIXES.has(m.word) && !m.particle) {
+        // お / ご belong to what follows, not what precedes.
+        tokens.push({ kana: m.word, particle: false, prefix: true })
+      } else {
+        tokens.push({ kana: m.word, particle: m.particle })
+      }
+      i += m.word.length
+      continue
+    }
+
+    if (PREFIXES.has(run[i])) {
+      tokens.push({ kana: run[i], particle: false, prefix: true })
+      i++
+      continue
+    }
+
+    // Unknown: keep going until a known word starts, so an unfamiliar word
+    // stays in one piece instead of being split into syllables.
+    let j = i + 1
+    while (j < run.length && !matchAt(run, j) && !PREFIXES.has(run[j])) j++
+    tokens.push({ kana: run.slice(i, j), particle: false })
+    i = j
+  }
+
+  // Fold each honorific prefix into the token after it.
+  const merged: KanaToken[] = []
+  for (const t of tokens) {
+    const prev = merged[merged.length - 1]
+    if (prev?.prefix) {
+      merged[merged.length - 1] = { kana: prev.kana + t.kana, particle: false }
+    } else {
+      merged.push(t)
+    }
+  }
+  return merged
+}
+
+/**
+ * How many leading characters of `run` are okurigana belonging to the kanji
+ * word before it.
+ *
+ * 足(あし)に and 探(さが)し look identical in shape — kanji, then hiragana — so
+ * this leans on two signals. A one-kana reading is almost always a verb or
+ * adjective stem, whose okurigana runs until the next real word (曲(ま)がって).
+ * Otherwise only kana that actually serve as okurigana are absorbed, which
+ * takes し in 探し while leaving に in 足に as the particle it is.
+ */
+function attachableOkurigana(run: string, reading: string): number {
+  if (!run) return 0
+
+  if (reading.length <= 1) {
+    // A one-kana reading is a verb or adjective stem, so what follows is its
+    // inflection — even when those kana happen to spell a word on their own
+    // (会(あ)いました: いました is also a form of いる, but here it is okurigana).
+    // Only an unambiguous particle ends the word.
+    let j = 0
+    while (j < run.length && j < MAX_OKURIGANA && !HARD_BOUNDARY.has(run[j])) {
+      if (j > 0 && OKURIGANA_STOP.some((w) => run.startsWith(w, j))) break
+      j++
+    }
+    return j
+  }
+
+  let j = 0
+  while (j < run.length && OKURIGANA.has(run[j]) && !matchAt(run, j)) j++
+  return j
+}
+
+/** Look up a bare kanji run/** Look up a bare kanji run, longest match first. */
 function readKanjiRun(run: string): string | null {
   for (let len = run.length; len >= 1; len--) {
     const reading = COMMON_READINGS[run.slice(0, len)]
@@ -132,9 +338,18 @@ function readKanjiRun(run: string): string | null {
   return null
 }
 
-/** Break a plain-text segment into romaji tokens. */
-function tokenizePlain(text: string): string[] {
+/**
+ * Break a plain-text segment into tokens.
+ *
+ * Returns the trailing honorific prefix separately when the segment ends in
+ * one: お in 「何をお探し」 belongs to the kanji word in the *next* segment.
+ */
+function tokenizePlain(
+  text: string,
+  followsContent: boolean
+): { tokens: string[]; trailingPrefix: string } {
   const tokens: string[] = []
+  let trailingPrefix = ""
   let i = 0
 
   while (i < text.length) {
@@ -152,14 +367,15 @@ function tokenizePlain(text: string): string[] {
     if (isKana(c)) {
       let j = i
       while (j < text.length && isKana(text[j])) j++
-      const run = text.slice(i, j)
-      const parts = splitParticles(run)
-      for (const part of parts) {
-        // A part is a grammatical particle when the splitter isolated it, not
-        // merely because those kana appear somewhere in a longer word.
-        const standalone = parts.length > 1 || PARTICLES.has(part)
-        for (const r of tokenToRomaji(part, standalone)) if (r) tokens.push(r)
-      }
+      // Only the very first run of the segment sits right after the previous word.
+      const kanaTokens = segmentKana(
+        text.slice(i, j), 0, followsContent && tokens.length === 0
+      )
+      kanaTokens.forEach((t, idx) => {
+        const isLast = idx === kanaTokens.length - 1 && j === text.length
+        if (isLast && t.prefix) { trailingPrefix = t.kana; return }
+        for (const r of tokenToRomaji(t.kana, t.particle)) if (r) tokens.push(r)
+      })
       i = j
       continue
     }
@@ -188,7 +404,7 @@ function tokenizePlain(text: string): string[] {
     i = j === i ? i + 1 : j
   }
 
-  return tokens
+  return { tokens, trailingPrefix }
 }
 
 /**
@@ -199,35 +415,72 @@ export function convertToRomaji(text: string): string {
   const tokens: string[] = []
   const segments = parseJapaneseText(text)
 
+  // Holds kana that must join the *next* word: an honorific prefix, or the
+  // first half of a word the model annotated in two pieces (食(た)べ物(もの)).
+  let carry = ""
+  let prevWasContent = false
+
+  const emit = (word: string, particle = false) => {
+    for (const r of tokenToRomaji(word, particle)) if (r) tokens.push(r)
+  }
+
   for (let s = 0; s < segments.length; s++) {
     const seg = segments[s]
 
     if (seg.type === "ruby") {
-      let word = seg.reading + seg.okurigana
+      let word = carry + seg.reading + seg.okurigana
+      carry = ""
 
-      // 曲(ま)がって — the model annotates only the kanji, leaving the okurigana
-      // in the following text. A one-kana reading is overwhelmingly a verb or
-      // adjective stem, so the hiragana that follows belongs to the same word;
-      // a longer reading is usually a noun, and what follows is a particle.
       const next = segments[s + 1]
-      if (seg.reading.length === 1 && !seg.okurigana && next?.type === "text") {
-        const oku = next.text.match(/^[ぁ-ん]+/)?.[0]
-        if (oku && !PARTICLES.has(oku)) {
-          word += oku
-          segments[s + 1] = { type: "text", text: next.text.slice(oku.length) }
+      if (!seg.okurigana && next?.type === "text") {
+        const run = next.text.match(/^[ぁ-ん]+/)?.[0] ?? ""
+        const take = attachableOkurigana(run, seg.reading)
+        if (take > 0) {
+          word += run.slice(0, take)
+          segments[s + 1] = { type: "text", text: next.text.slice(take) }
         }
       }
 
-      for (const r of tokenToRomaji(word, false)) if (r) tokens.push(r)
+      // 食(た)べ物(もの) is one word the model annotated twice. If nothing is
+      // left between this ruby and the next, they belong together.
+      const after = segments[s + 1]
+      const joinsNextRuby =
+        after?.type === "ruby" ||
+        (after?.type === "text" && after.text === "" && segments[s + 2]?.type === "ruby")
+      if (joinsNextRuby) {
+        carry = word
+      } else {
+        emit(word)
+      }
+
+      prevWasContent = true
       continue
     }
 
     if (seg.type === "katakana") {
-      tokens.push(kanaToRomaji(seg.term))
+      emit(carry + seg.term)
+      carry = ""
+      prevWasContent = true
       continue
     }
-    tokens.push(...tokenizePlain(seg.text))
+
+    if (!seg.text) continue
+
+    const { tokens: plain, trailingPrefix } = tokenizePlain(seg.text, prevWasContent)
+    if (carry && plain.length === 0 && !trailingPrefix) {
+      // Nothing here to attach to; do not lose the carried kana.
+      emit(carry)
+      carry = ""
+    } else if (carry) {
+      emit(carry)
+      carry = ""
+    }
+    tokens.push(...plain)
+    carry = trailingPrefix
+    prevWasContent = plain.length > 0 && !trailingPrefix
   }
+
+  if (carry) emit(carry)
 
   return tokens.filter(Boolean).join(" ").replace(/\s+([.,!?])/g, "$1").trim()
 }
