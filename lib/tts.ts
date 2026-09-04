@@ -19,12 +19,19 @@ function detectLang(text: string): "ja" | "zh" {
 }
 
 /**
- * Strip furigana parentheses before synthesis — 食べ物(たべもの) must be spoken
- * once, not twice. Exported so a prefetch and its later playback normalise the
- * text identically; a mismatch would silently discard the prefetched audio.
+ * Strip furigana before synthesis — 食べ物(たべもの) must be spoken once, not
+ * twice.
+ *
+ * Matches both paren widths, since the models use either, and only kana
+ * contents, so a genuine parenthetical is left alone rather than silently
+ * dropped from what gets read aloud.
+ *
+ * Exported so a prefetch and its later playback normalise identically; a
+ * mismatch would quietly discard the prefetched audio. The scene panel uses it
+ * too — it previously had its own copy that disagreed on both points.
  */
 export function toSpeechText(text: string): string {
-  return text.replace(/\([^)）]+\)/g, "")
+  return text.replace(/[（(][ぁ-んァ-ヺー]+[)）]/g, "")
 }
 
 /**

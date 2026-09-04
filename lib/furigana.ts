@@ -1,3 +1,20 @@
+/**
+ * Furigana markup, normalised to half-width parentheses.
+ *
+ * The models write furigana in either width — the podcast's system prompt is
+ * itself Japanese ("カッコ内に"), and full-width （） is the convention in
+ * Japanese text. Everything downstream matched only `(`, so a full-width
+ * reading rendered no ruby, leaked into romaji as literal kana, and was read
+ * aloud a second time by the podcast. Normalising here fixes all three, because
+ * every consumer parses through this module.
+ */
+export function normalizeFurigana(text: string): string {
+  return text.replace(
+    /（([ぁ-んァ-ヺー]+)）/g,
+    (_, reading: string) => `(${reading})`
+  )
+}
+
 export type FuriganaSegment =
   | { type: "text"; text: string }
   | { type: "ruby"; kanji: string; reading: string; okurigana: string }
@@ -20,7 +37,8 @@ function splitOkurigana(
   return { kanji: base, reading, okurigana: "" }
 }
 
-export function parseFuriganaSegments(text: string): FuriganaSegment[] {
+export function parseFuriganaSegments(input: string): FuriganaSegment[] {
+  const text = normalizeFurigana(input)
   const segments: FuriganaSegment[] = []
   // Base must start with a kanji so preceding hiragana (e.g. ちょっと in ちょっと難(むずか)) are not captured
   const re = /([一-龯々][一-龯々ぁ-ん]*)\(([ぁ-ん]+)\)/g

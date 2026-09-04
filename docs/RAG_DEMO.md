@@ -6,13 +6,47 @@ A minimal **Retrieval-Augmented Generation** pipeline embedded in the Japanese D
 
 1. **Corpus** — static documents in `lib/rag/corpus.ts` (grammar, scenarios, product tips)
 2. **Chunking** — paragraph-aware splits with overlap (`lib/rag/chunk.ts`)
-3. **Indexing** — in-memory TF-IDF + cosine similarity (`lib/rag/tfidf.ts`)
+3. **Indexing** — in-memory BM25 over character + bigram tokens, with a Chinese
+   stopword list (`lib/rag/tfidf.ts`)
 4. **Retrieve** — `POST /api/rag/retrieve` returns ranked chunks + scores
 5. **Generate** — `POST /api/rag/generate` injects context into Groq LLM, streams answer with `[1]` citations
 
 UI: `/rag` — shows pipeline steps, retrieved chunks, and streamed answer.
 
-## Why TF-IDF (not vectors) for this demo
+## Retrieval quality
+
+Measured with a 15-question golden set (`tests/rag.test.ts`), the eval this doc
+proposes below:
+
+| Retriever | hit@1 | hit@3 |
+|-----------|-------|-------|
+| TF-IDF cosine, no stopwords (original) | 67% | 100% |
+| + Chinese stopwords | 80% | 100% |
+| + BM25 ranking (current) | **87%** | **100%** |
+
+Two findings behind those numbers:
+
+**Chinese interrogatives were being scored as content.** Character-level
+tokenisation made 「有什么」 a match, so 「は和が有什么区别」 retrieved a
+product-tips document that happens to contain those words — including the
+example query printed in this file.
+
+**Japanese particles must NOT be stopwords.** Adding は and が to the list — the
+obvious move if you copy a generic CJK stopword list — dropped hit@1 to 53% and
+made 「は和が的区别」 return nothing at all. In a corpus about Japanese grammar,
+the particles are the subject matter.
+
+BM25 replaced cosine because cosine treats a term appearing five times as five
+times as relevant, which on character tokens lets repetition of a common
+character win. Its length-normalisation term is currently inert — chunks are all
+113–214 tokens — so the gain came from term saturation; the normalisation starts
+mattering if chunk sizes diverge.
+
+Known gap: 「居酒屋点菜怎么说」 ranks `keigo-basics` first. Defensible (ordering
+politely *is* keigo) but `izakaya-scenario` is the better answer; it is in the
+top 3.
+
+## Why lexical retrieval (not vectors) for this demo
 
 - **Zero extra API keys** — runs with only `GROQ_API_KEY`
 - **Transparent** — scores are inspectable in the UI (good for live demos)
@@ -96,12 +130,13 @@ Patterns to mention:
 - **Function calling** — Groq/OpenAI tool schema for `search_knowledge_base`
 - **Guardrails** — system prompt: answer only from context; cite sources
 - **Eval** — hit rate@k on a golden set of questions vs expected doc ids
+  (implemented: `tests/rag.test.ts`, run with `npm test`)
 
 ## Production upgrades (one-liners for HR/tech interview)
 
 | Demo | Production |
 |------|------------|
-| In-memory TF-IDF | OpenAI/Cohere embeddings + vector DB |
+| In-memory BM25 | OpenAI/Cohere embeddings + vector DB |
 | Static `corpus.ts` | PDF/Markdown ingest pipeline + cron reindex |
 | Split retrieve/generate APIs | Single agent orchestrator with tracing (Langfuse, etc.) |
 | No cache | Semantic cache for repeated queries |
