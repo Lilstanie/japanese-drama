@@ -4,14 +4,9 @@ import { useEffect, useRef, useState, useCallback } from "react"
 import type { Message } from "@/lib/types"
 import { convertToRomaji } from "@/lib/romaji"
 import JapaneseText from "@/components/JapaneseText"
-import { speakLine, cancelSpeech } from "@/lib/tts"
+import { speakLine, cancelSpeech, toSpeechText } from "@/lib/tts"
 import { useVoices } from "@/components/VoiceProvider"
 import VoicePicker from "@/components/VoicePicker"
-
-function stripFurigana(text: string): string {
-  // Strip both half-width () and full-width （）; also allow ー (long vowel) inside readings
-  return text.replace(/[（(][ぁ-んァ-ンー]+[)）]/g, "")
-}
 
 function isFemaleVoice(name: string) {
   return /kyoko|o-ren|haruka|nanami|keiko|mizuki|sakura|hana|yui|female|woman/i.test(name)
@@ -39,7 +34,7 @@ function pickVoice(voices: SpeechSynthesisVoice[], preferFemale: boolean) {
 function speak(text: string, voiceName: string, onEnd: () => void) {
   if (!window.speechSynthesis) return
   window.speechSynthesis.cancel()
-  const utterance = new SpeechSynthesisUtterance(stripFurigana(text))
+  const utterance = new SpeechSynthesisUtterance(toSpeechText(text))
   utterance.lang = "ja-JP"
   utterance.rate = 0.85
   const voice = window.speechSynthesis.getVoices().find(v => v.name === voiceName)
@@ -182,7 +177,13 @@ export default function DialogPanel({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, streamingText])
 
-  useEffect(() => () => { window.speechSynthesis?.cancel() }, [])
+  // Stop both paths on unmount. Cancelling only speechSynthesis left AI audio
+  // playing after navigating away from a scene, since that path is an
+  // HTMLAudioElement owned by lib/tts, not an utterance.
+  useEffect(() => () => {
+    cancelSpeech()
+    window.speechSynthesis?.cancel()
+  }, [])
 
   // Auto-play new character lines when the feature is enabled
   useEffect(() => {
@@ -192,7 +193,7 @@ export default function DialogPanel({
       if (last && last.role === "character") {
         if (useAIVoice) {
           setPlayingId(last.id)
-          speakLine(stripFurigana(last.content), "A", 1, 1, null, voiceFor("character"))
+          speakLine(toSpeechText(last.content), "A", 1, 1, null, voiceFor("character"))
             .then(() => setPlayingId(cur => (cur === last.id ? null : cur)))
         } else if (charVoice) {
           speak(last.content, charVoice, () => setPlayingId(null))
@@ -212,7 +213,7 @@ export default function DialogPanel({
       // Scene lines are always Japanese, so speaker "A" regardless of who said
       // it; the two sides are told apart by voice, not by language.
       await speakLine(
-        stripFurigana(text), "A", 1, 1, null,
+        toSpeechText(text), "A", 1, 1, null,
         voiceFor(isUser ? "narrator" : "character")
       )
       setPlayingId(cur => (cur === id ? null : cur))
