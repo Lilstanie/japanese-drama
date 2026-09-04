@@ -48,7 +48,7 @@ Required:
 Optional:
 
 - `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL`  
-  Point the app at any OpenAI-compatible provider (see §7). Defaults to Groq.
+  Point the app at any OpenAI-compatible provider (see §8). Defaults to Groq.
 - `AI_REASONING_EFFORT`  
   `low` (default), `medium`, `high`, or `off` for models that reject the parameter.
 - `GROQ_MODEL`  
@@ -173,7 +173,51 @@ to tell the difference quickly.
 - Ensure `EXTRA_SCENARIOS_JSON` is valid JSON array.
 - Confirm scenario id is not in hidden list in `lib/scenarios.ts`.
 
-## 6) Suggested Next Hardening
+## 6) Automation
+
+Two GitHub Actions workflows, both deliberately limited to checks with a
+machine-decidable answer.
+
+### `ci.yml` — every push and PR
+
+`npm ci`, `npm test`, `npm run build` on Node 24. No secrets are provided: every
+route builds without them, and a build that needed a key would be doing at build
+time what belongs at request time.
+
+### `health.yml` — daily, and on demand
+
+Curls `GET /api/health` on production and fails the run if it is not 200.
+
+This exists because of a specific outage. Groq retired
+`llama-3.3-70b-versatile` while the id was duplicated across five route
+handlers; chat, coach, podcast and RAG all began returning 404, and nothing
+surfaced it — a failed chat request just looks like the character not replying.
+`/api/health` checks the two things that fail that quietly:
+
+| Check | Catches |
+|-------|---------|
+| `chatModel` | The configured model is no longer in the provider's model list, or the key is rejected |
+| `tts` | The TTS key is invalid, or a configured voice has left the catalogue |
+
+It reports names and booleans only, never key material, since the endpoint is
+public. It returns **503** when unhealthy so `curl --fail` and uptime monitors
+treat it as down without parsing the body.
+
+Verified by simulating both failures: setting `AI_MODEL` back to the retired
+llama id produces `503` with `model "llama-3.3-70b-versatile" is no longer
+offered`, and an invalid `CAMB_API_KEY` produces `camb returned 401 — key
+invalid or revoked`.
+
+To check by hand: `curl -s .../api/health | jq`, or run the workflow from the
+Actions tab.
+
+### What is deliberately not automated
+
+Anything whose pass/fail is a judgement — whether romaji reads naturally,
+whether a voice sounds right, whether a feature is wired to the UI a user
+actually reaches. Those failures look like success to a script.
+
+## 7) Suggested Next Hardening
 
 - Add server-side env validation on startup.
 - Add API rate limiting.
@@ -186,7 +230,7 @@ to tell the difference quickly.
   - kana romaji validation
   - katakana run segmentation (full-cover vs greedy)
 
-## 7) Model & Provider Configuration
+## 8) Model & Provider Configuration
 
 Every AI route builds its client with `createAIClient()` and spreads
 `chatParams(n)` from `lib/model.ts`. Nothing else names a provider, so switching
@@ -255,7 +299,7 @@ Provider errors no longer leak into the dialogue. `friendlyAIError()` maps
 status codes to a readable note (rate limit, bad key, retired model) and logs
 the raw error server-side.
 
-## 8) Romaji Word Segmentation
+## 9) Romaji Word Segmentation
 
 `lib/romaji.ts` has to decide where words end, because Japanese is written
 without spaces and unsegmented romaji is unreadable. Two shortcuts avoid needing
@@ -285,7 +329,7 @@ katakana dictionary. Add tests alongside; the suite is mutation-checked.
 すみません into すみませ+ん. kuromoji is accurate but ships a 40MB dictionary,
 which is far too heavy for client-side use.
 
-## 9) Voice / TTS Options
+## 10) Voice / TTS Options
 
 Provider is chosen by `TTS_PROVIDER`, or auto-detected from whichever key is
 present (ElevenLabs preferred for latency). The client just plays whatever bytes

@@ -1,0 +1,33 @@
+name: Production health
+
+# Catches the failures that are invisible from the outside: a chat model the
+# provider retired, or a TTS key that stopped working. Both have happened —
+# llama-3.3-70b-versatile was decommissioned and every AI route 404'd silently.
+on:
+  schedule:
+    # 21:00 UTC ≈ 08:00 Sydney, so a failure is waiting at the start of the day.
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+
+jobs:
+  health:
+    name: Check production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query health endpoint
+        run: |
+          echo "Checking https://japanese-drama.vercel.app/api/health"
+          # Capture the body regardless of status so a failure is readable here
+          # rather than needing a trip to the Vercel logs.
+          code=$(curl -sS -o response.json -w '%{http_code}' \
+            --max-time 60 --retry 2 --retry-delay 10 \
+            https://japanese-drama.vercel.app/api/health)
+
+          echo "HTTP $code"
+          cat response.json | python3 -m json.tool || cat response.json
+
+          if [ "$code" != "200" ]; then
+            echo "::error::Production is unhealthy (HTTP $code) — see the checks above"
+            exit 1
+          fi
+          echo "All checks passed."

@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push makes an in-flight run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 24 for the built-in test runner's TypeScript stripping, which is
+          # what lets the suite run without a test framework.
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      # No secrets: every route builds without them, and a build that needed a
+      # key would be hiding work that belongs at request time.
+      - name: Production build
+        run: npm run build

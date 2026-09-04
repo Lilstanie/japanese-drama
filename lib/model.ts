@@ -11,7 +11,7 @@ import OpenAI from "openai"
  * `AI_MODEL` in `.env.local`. Defaults keep the existing Groq setup working, and
  * the older `GROQ_*` names are still honoured.
  *
- * See docs/SETUP_AND_RUNBOOK.md §7 for tested provider/model combinations.
+ * See docs/SETUP_AND_RUNBOOK.md §8 for tested provider/model combinations.
  */
 export const AI_BASE_URL =
   process.env.AI_BASE_URL ?? "https://api.groq.com/openai/v1"
@@ -106,7 +106,7 @@ export function friendlyAIError(err: unknown, context: string): string {
     return "（AI 密钥无效，请检查 .env.local 中的 AI_API_KEY）"
   }
   if (status === 404) {
-    return `（模型 ${CHAT_MODEL} 不可用，可能已下线；见 runbook §7）`
+    return `（模型 ${CHAT_MODEL} 不可用，可能已下线；见 runbook §8）`
   }
   if (status && status >= 500) {
     return "（AI 服务暂时不可用，请稍后再试）"
