@@ -6,6 +6,8 @@ import KatakanaToggle from "@/components/KatakanaToggle"
 import { PODCAST_TOPICS } from "@/lib/podcast-topics"
 import type { PodcastTopic } from "@/lib/podcast-topics"
 import { speakLine, cancelSpeech, initBackgroundAudio, setTTSMode, prefetchLineAudio, toSpeechText } from "@/lib/tts"
+import { useVoices } from "@/components/VoiceProvider"
+import { roleForSpeaker } from "@/lib/voices"
 import type { TTSMode } from "@/lib/tts"
 import PodcastTranscript from "./PodcastTranscript"
 import PodcastControls from "./PodcastControls"
@@ -105,12 +107,17 @@ export default function PodcastPlayer() {
   const difficultyRef = useRef<Difficulty>("N4")
   const speedRef = useRef(1)
   const volumeRef = useRef(0.9)
+  // The playback loop outlives any single render, so it reads the current voice
+  // choice through a ref — changing a voice mid-episode takes effect next line.
+  const { voiceFor } = useVoices()
+  const voiceRef = useRef(voiceFor)
   const ttsModeRef = useRef<TTSMode>("ai")
   // Resolver for the inter-turn gap — calling it skips the wait
   const skipGapRef = useRef<(() => void) | null>(null)
 
   useEffect(() => { topicRef.current = topic }, [topic])
   useEffect(() => { difficultyRef.current = difficulty }, [difficulty])
+  useEffect(() => { voiceRef.current = voiceFor }, [voiceFor])
   useEffect(() => { speedRef.current = speed }, [speed])
   useEffect(() => { volumeRef.current = volume }, [volume])
   useEffect(() => { initBackgroundAudio() }, [])
@@ -202,7 +209,10 @@ export default function PodcastPlayer() {
         if (!isPlayingRef.current || loopGenRef.current !== myGen) return null
         // Start synthesis immediately and do NOT await it — it runs while the
         // current line is still playing, which is the whole point.
-        return { text, audio: prefetchLineAudio(text, nextSpeaker) }
+        return {
+          text,
+          audio: prefetchLineAudio(text, nextSpeaker, voiceRef.current(roleForSpeaker(nextSpeaker))),
+        }
       })
 
       const speakText = toSpeechText(line)
@@ -210,7 +220,8 @@ export default function PodcastPlayer() {
       // playback of the previous line.
       const prefetchedAudio = audioPromise ? await audioPromise : null
       const usedAI = await speakLine(
-        speakText, speaker, speedRef.current, volumeRef.current, prefetchedAudio
+        speakText, speaker, speedRef.current, volumeRef.current, prefetchedAudio,
+        voiceRef.current(roleForSpeaker(speaker))
       )
       if (ttsModeRef.current === "ai") setAiWorking(usedAI)
 

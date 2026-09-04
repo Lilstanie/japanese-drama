@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import AnnotationProvider from "@/components/AnnotationProvider";
+import VoiceProvider from "@/components/VoiceProvider";
 
 export const metadata: Metadata = {
   title: "日本語ドラマ | 沉浸式日语学习",
@@ -16,7 +17,9 @@ export default function RootLayout({
   return (
     <html lang="ja" className="h-full">
       <body className="h-full">
-        <AnnotationProvider>{children}</AnnotationProvider>
+        <AnnotationProvider>
+          <VoiceProvider>{children}</VoiceProvider>
+        </AnnotationProvider>
       </body>
     </html>
   );

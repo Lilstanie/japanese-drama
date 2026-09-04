@@ -126,12 +126,12 @@ describe("podcast voice resolution", () => {
     const b = v.resolveVoice("B")
     assert.equal(a.locale, "ja-jp")
     assert.equal(b.locale, "zh-cn")
-    assert.equal(a.name, "A-japanese_male_camb")
-    assert.equal(b.name, "B-chinese_male_camb")
+    assert.equal(a.cambName, "Kenta Hayashi")
+    assert.equal(b.language, "zh")
   })
 
   test("a registered name selects that voice", async () => {
-    const v = await freshVoices({ ...clear, CAMB_VOICE_A: "A-japanese_female_camb" })
+    const v = await freshVoices({ ...clear, CAMB_VOICE_A: "ja_female_171038" })
     const a = v.resolveVoice("A")
     assert.equal(a.gender, "female")
     assert.equal(a.cambId, 171038)
@@ -147,7 +147,14 @@ describe("podcast voice resolution", () => {
 
   test("an unknown name falls back instead of breaking synthesis", async () => {
     const v = await freshVoices({ ...clear, CAMB_VOICE_A: "does-not-exist" })
-    assert.equal(v.resolveVoice("A").name, "A-japanese_male_camb")
+    assert.equal(v.resolveVoice("A").cambName, "Kenta Hayashi")
+  })
+
+  test("the Japanese character and narrator can be told apart", async () => {
+    // Both speak Japanese, so distinct voices are the only thing separating
+    // the character from the learner's own lines.
+    const v = await freshVoices({ ...clear })
+    assert.notEqual(v.ROLES.character.fallback, v.ROLES.narrator.fallback)
   })
 
   test("a name requested by the client resolves to that voice", async () => {
@@ -155,8 +162,8 @@ describe("podcast voice resolution", () => {
     // do not sound identical — both are Japanese, so speaker alone cannot tell
     // them apart.
     const v = await freshVoices({ ...clear })
-    const char = v.voiceByName("A-japanese_female_camb")
-    const user = v.voiceByName("A-japanese_male_camb")
+    const char = v.voiceByName("ja_female_171038")
+    const user = v.voiceByName("ja_male_171040")
     assert.equal(char?.gender, "female")
     assert.equal(user?.gender, "male")
     assert.equal(char?.locale, "ja-jp")
@@ -177,12 +184,35 @@ describe("podcast voice resolution", () => {
     assert.ok(v.voicesForLanguage("ja").every((x: { locale: string }) => x.locale === "ja-jp"))
   })
 
-  test("every registered voice has a locale matching its speaker", async () => {
+  test("every voice's locale matches its language", async () => {
     const v = await freshVoices({ ...clear })
     for (const name of v.listVoiceNames()) {
       const voice = v.NAMED_VOICES[name]
-      const expected = voice.speaker === "A" ? "ja-jp" : "zh-cn"
+      const expected = voice.language === "ja" ? "ja-jp" : "zh-cn"
       assert.equal(voice.locale, expected, `${name} has the wrong locale`)
+    }
+  })
+
+  test("a role only ever offers voices of its own language", async () => {
+    // Offering a Chinese voice for the Japanese character would produce a
+    // wrong-language line with no visible cause.
+    const v = await freshVoices({ ...clear })
+    for (const role of ["character", "narrator", "chinese"]) {
+      const lang = v.ROLES[role].language
+      const options = v.voicesForRole(role)
+      assert.ok(options.length >= 2, `${role} needs a real choice`)
+      assert.ok(
+        options.every((o: { language: string }) => o.language === lang),
+        `${role} offers a wrong-language voice`
+      )
+    }
+  })
+
+  test("every role's default is one of its own options", async () => {
+    const v = await freshVoices({ ...clear })
+    for (const role of ["character", "narrator", "chinese"]) {
+      const names = v.voicesForRole(role).map((o: { name: string }) => o.name)
+      assert.ok(names.includes(v.ROLES[role].fallback), `${role} default is not offered`)
     }
   })
 })

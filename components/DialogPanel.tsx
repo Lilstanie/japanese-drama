@@ -5,20 +5,12 @@ import type { Message } from "@/lib/types"
 import { convertToRomaji } from "@/lib/romaji"
 import JapaneseText from "@/components/JapaneseText"
 import { speakLine, cancelSpeech } from "@/lib/tts"
+import { useVoices } from "@/components/VoiceProvider"
 
 function stripFurigana(text: string): string {
   // Strip both half-width () and full-width （）; also allow ー (long vowel) inside readings
   return text.replace(/[（(][ぁ-んァ-ンー]+[)）]/g, "")
 }
-
-/**
- * Both sides of a scene speak Japanese, so they need two different Japanese
- * voices — unlike the podcast, where the speakers differ by language.
- */
-const AI_VOICE = {
-  character: "A-japanese_female_camb",
-  user: "A-japanese_male_camb",
-} as const
 
 function isFemaleVoice(name: string) {
   return /kyoko|o-ren|haruka|nanami|keiko|mizuki|sakura|hana|yui|female|woman/i.test(name)
@@ -163,6 +155,9 @@ export default function DialogPanel({
   const [charVoice, setCharVoice] = useState("")
   const [userVoice, setUserVoice] = useState("")
   const [autoPlay, setAutoPlay] = useState(false)
+  // Both sides of a scene speak Japanese, so they are told apart by voice
+  // rather than by language: the character and the learner get separate picks.
+  const { voiceFor } = useVoices()
   // AI voice (Camb / ElevenLabs) vs the browser's built-in speech synthesis.
   const [useAIVoice, setUseAIVoice] = useState(true)
   const prevLengthRef = useRef(messages.length)
@@ -196,7 +191,7 @@ export default function DialogPanel({
       if (last && last.role === "character") {
         if (useAIVoice) {
           setPlayingId(last.id)
-          speakLine(stripFurigana(last.content), "A", 1, 1, null, AI_VOICE.character)
+          speakLine(stripFurigana(last.content), "A", 1, 1, null, voiceFor("character"))
             .then(() => setPlayingId(cur => (cur === last.id ? null : cur)))
         } else if (charVoice) {
           speak(last.content, charVoice, () => setPlayingId(null))
@@ -205,7 +200,7 @@ export default function DialogPanel({
       }
     }
     prevLengthRef.current = messages.length
-  }, [messages, isStreaming, autoPlay, charVoice, useAIVoice])
+  }, [messages, isStreaming, autoPlay, charVoice, useAIVoice, voiceFor])
 
   const handlePlay = useCallback(async (id: string, text: string) => {
     const msg = messages.find(m => m.id === id)
@@ -217,14 +212,14 @@ export default function DialogPanel({
       // it; the two sides are told apart by voice, not by language.
       await speakLine(
         stripFurigana(text), "A", 1, 1, null,
-        isUser ? AI_VOICE.user : AI_VOICE.character
+        voiceFor(isUser ? "narrator" : "character")
       )
       setPlayingId(cur => (cur === id ? null : cur))
       return
     }
 
     speak(text, isUser ? userVoice : charVoice, () => setPlayingId(null))
-  }, [messages, charVoice, userVoice, useAIVoice])
+  }, [messages, charVoice, userVoice, useAIVoice, voiceFor])
 
   const handleStop = useCallback(() => {
     cancelSpeech()

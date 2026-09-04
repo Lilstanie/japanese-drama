@@ -316,6 +316,30 @@ The **🎙 AI 语音 / 💻 浏览器语音** button in the scene header switche
 provider voice and the browser's built-in speech synthesis; the browser voice
 pickers only appear in browser mode, where they mean something.
 
+### Choosing voices in the app
+
+The home page has a **🎙 声音设置** panel with one dropdown per speaking role.
+The choice is stored per browser (`jd:v1:voices`) and sent as the `voice` field
+on `POST /api/podcast/tts`, so scene playback and the podcast both follow it.
+
+| Role | Language | Used by | Default |
+|------|----------|---------|---------|
+| `character` | ja | The person you talk to in a scene | Hina Endo |
+| `narrator` | ja | Your own messages, and the podcast's Japanese speaker | Kenta Hayashi |
+| `chinese` | zh | The podcast's Chinese speaker | Lei Sun |
+
+`narrator` covers two places because both are "the app reading Japanese at
+you"; one choice serves both and keeps the picker to three rows.
+
+Preview synthesises through the real TTS route rather than shipping audio files,
+so what you hear is what the app will say. `lib/voices.ts` holds a curated
+subset — Camb offers 18 Japanese and 37 Mandarin voices, but a dropdown of 37 is
+a chore, not a choice. `voicesForRole()` only ever returns the role's own
+language, which is what stops a Chinese voice being picked for a Japanese line.
+
+Env `CAMB_VOICE_A` / `CAMB_VOICE_B` still set the server-side default for
+clients that send no voice.
+
 ### Named voices
 
 Speaker A speaks Japanese, speaker B Chinese, and a Camb voice speaks only its
