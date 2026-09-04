@@ -78,8 +78,20 @@ export function chatParams(visibleTokens: number) {
   }
 }
 
+/**
+ * The SDK throws on a missing key, which turned a missing env var into a *build*
+ * failure: Next evaluates route modules when collecting page data, so a client
+ * built at module scope crashed `next build` in CI with "Missing credentials".
+ *
+ * A placeholder defers that to request time, where it surfaces as a 401 and
+ * friendlyAIError() explains it. Construct clients inside handlers anyway —
+ * this only stops a mistake from breaking the build.
+ */
 export function createAIClient(): OpenAI {
-  return new OpenAI({ apiKey: AI_API_KEY, baseURL: AI_BASE_URL })
+  return new OpenAI({
+    apiKey: AI_API_KEY ?? "missing-api-key",
+    baseURL: AI_BASE_URL,
+  })
 }
 
 /**

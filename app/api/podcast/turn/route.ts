@@ -1,7 +1,5 @@
 import { chatParams, createAIClient } from "@/lib/model"
 
-const client = createAIClient()
-
 const SYSTEM_A = (topic: string, difficulty: string, seed: string) =>
   `あなたはKenjiです。日本人の26歳男性で、友達のWeiと気楽に話しています。
 日本語だけで話してください。絶対に中国語を使わないこと。
@@ -30,6 +28,10 @@ export async function POST(request: Request) {
     speaker: "A" | "B"
     history: { speaker: "A" | "B"; content: string }[]
   }
+
+  // Built per request, not at module scope: Next evaluates route modules while
+  // collecting page data at build time, where no key exists.
+  const client = createAIClient()
 
   const system = speaker === "A" ? SYSTEM_A(topic, difficulty, seed) : SYSTEM_B(topic, difficulty, seed)
 
