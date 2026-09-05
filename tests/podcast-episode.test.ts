@@ -119,6 +119,32 @@ describe("failures degrade instead of aborting", () => {
   })
 })
 
+describe("the caller can tell splicing apart from real failure", () => {
+  // The player falls back to per-line playback on null, so null must mean
+  // "cannot splice" and not be confused with "provider is down" — both return
+  // null, and both should degrade the same way rather than stop dead.
+  test("null is returned for unsplitable audio, not thrown", async () => {
+    const mp3 = new Uint8Array([0xff, 0xfb, 0x90, 0x00]).buffer
+    await assert.doesNotReject(async () => {
+      const ep = await buildEpisode(
+        { startIndex: 0, count: 2, rotation, situationFor },
+        deps({ fetchAudio: async () => mp3 })
+      )
+      assert.equal(ep, null)
+    })
+  })
+
+  test("null is returned when synthesis is unavailable, not thrown", async () => {
+    await assert.doesNotReject(async () => {
+      const ep = await buildEpisode(
+        { startIndex: 0, count: 2, rotation, situationFor },
+        deps({ fetchAudio: async () => null })
+      )
+      assert.equal(ep, null)
+    })
+  })
+})
+
 describe("cancellation", () => {
   test("stops early when the listener pauses", async () => {
     let made = 0

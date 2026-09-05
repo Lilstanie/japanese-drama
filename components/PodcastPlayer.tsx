@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import Link from "next/link"
 import KatakanaToggle from "@/components/KatakanaToggle"
 import { PODCAST_TOPICS, TOPIC_CATEGORY_LABEL } from "@/lib/podcast-topics"
-import { buildRotation, pickSituation, shuffle, SEGMENTS_PER_TOPIC, type Situation } from "@/lib/podcast-plan"
+import { buildRotation, planSegment, pickSituation, shuffle, SEGMENTS_PER_TOPIC, type Situation } from "@/lib/podcast-plan"
 import {
   buildEpisode, segmentAt, DEFAULT_EPISODE_LENGTH,
   type Episode, type BuildDeps,
@@ -288,6 +288,58 @@ export default function PodcastPlayer() {
   }, [])
 
   /**
+   * Line-by-line playback, used when an episode cannot be assembled.
+   *
+   * Splicing needs uncompressed PCM, so a compressed provider (ElevenLabs
+   * returns MP3) or a failed synthesis leaves nothing to join. This is the old
+   * behaviour: it stops when the screen locks, but playing without background
+   * support beats not playing at all — and speakLine still falls back to
+   * browser voices from here.
+   */
+  const runPerLineFallback = useCallback(async (gen: number) => {
+    const alive = () => isPlayingRef.current && loopGenRef.current === gen
+
+    while (alive()) {
+      const plan = planSegment(segmentIndexRef.current, rotationRef.current)
+      if (plan.startsTopic || !situationRef.current) situationRef.current = pickSituation()
+
+      setIsGenerating(true)
+      const line = await fetchWithRetry(
+        plan.topic, difficultyRef.current, plan.speaker, historyRef.current,
+        plan.kind, plan.move, situationRef.current ?? undefined
+      )
+      setIsGenerating(false)
+      if (!alive()) break
+
+      if (!line?.trim()) {
+        setErrorMsg("连接失败，请重试")
+        isPlayingRef.current = false
+        setIsPlaying(false)
+        break
+      }
+
+      const id = `${plan.index}`
+      historyRef.current = [...historyRef.current.slice(-7), { speaker: plan.speaker, content: line }]
+      setNowTopic(plan.topic)
+      setCurrentSpeaker(plan.speaker)
+      setTranscript((prev) => [
+        ...prev.slice(-(MAX_TRANSCRIPT - 1)).map((l) => ({ ...l, isPlaying: false })),
+        { id, speaker: plan.speaker, content: line, isPlaying: true, timestamp: Date.now() },
+      ])
+
+      const usedAI = await speakLine(
+        toSpeechText(line), plan.speaker, speedRef.current, volumeRef.current,
+        null, voiceRef.current(roleForSpeaker(plan.speaker))
+      )
+      if (ttsModeRef.current === "ai") setAiWorking(usedAI)
+
+      setTranscript((prev) => prev.map((l) => (l.id === id ? { ...l, isPlaying: false } : l)))
+      if (!alive()) break
+      segmentIndexRef.current += 1
+    }
+  }, [])
+
+  /**
    * Play in episodes rather than line by line.
    *
    * A queue of clips needs JS to run between them, and a backgrounded tab has
@@ -333,11 +385,12 @@ export default function PodcastPlayer() {
     let episode: Episode | null = await build(segmentIndexRef.current, FIRST_EPISODE_LENGTH)
     setBuildProgress(null)
 
+    // Nothing to splice — a compressed provider, or synthesis failed. Keep
+    // playing without background support rather than stopping dead.
     if (!episode) {
       if (alive()) {
-        setErrorMsg("无法生成内容，请重试")
-        isPlayingRef.current = false
-        setIsPlaying(false)
+        console.warn("[podcast] episode build failed; falling back to per-line playback")
+        await runPerLineFallback(gen)
       }
       return
     }
@@ -387,12 +440,11 @@ export default function PodcastPlayer() {
       episode = await nextEpisode
       nextEpisode = null
       if (!episode && alive()) {
-        setErrorMsg("生成中断，请重试")
-        isPlayingRef.current = false
-        setIsPlaying(false)
+        console.warn("[podcast] next episode failed; falling back to per-line playback")
+        await runPerLineFallback(gen)
       }
     }
-  }, [playEpisode])
+  }, [playEpisode, runPerLineFallback])
 
 
   function startLoop() {
