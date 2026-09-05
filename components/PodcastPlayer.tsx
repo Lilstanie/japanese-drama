@@ -4,7 +4,11 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import Link from "next/link"
 import KatakanaToggle from "@/components/KatakanaToggle"
 import { PODCAST_TOPICS, TOPIC_CATEGORY_LABEL } from "@/lib/podcast-topics"
-import { buildRotation, planSegment, pickSituation, shuffle, SEGMENTS_PER_TOPIC, type PlannedSegment, type Situation } from "@/lib/podcast-plan"
+import { buildRotation, pickSituation, shuffle, SEGMENTS_PER_TOPIC, type Situation } from "@/lib/podcast-plan"
+import {
+  buildEpisode, segmentAt, DEFAULT_EPISODE_LENGTH,
+  type Episode, type BuildDeps,
+} from "@/lib/podcast-episode"
 import {
   setMediaSessionHandlers,
   clearMediaSession,
@@ -36,6 +40,17 @@ type Difficulty = (typeof DIFFICULTIES)[number]
 const MAX_TRANSCRIPT = 40
 const TURN_TIMEOUT_MS = 20_000
 const GAP_MS = 400
+/**
+ * The opening stretch is shorter so playback starts sooner, but not so short
+ * that the next episode cannot be built before it ends.
+ *
+ * Measured against the real providers: ~3.1s to generate a segment, ~9.3s to
+ * play one. A 12-segment episode therefore takes ~38s to build, so the opening
+ * stretch has to cover at least that. Four segments plays for 37s — 0.7s short,
+ * a stall at the very first changeover. Six plays for ~56s, leaving ~18s of
+ * margin for a slow response.
+ */
+const FIRST_EPISODE_LENGTH = 6
 
 async function fetchTurn(
   topic: PodcastTopic,
@@ -143,7 +158,12 @@ export default function PodcastPlayer() {
   // Also deferred: as a useRef argument this ran on every render, including on
   // the server, for a value only the first render keeps.
   const situationRef = useRef<Situation | null>(null)
+  // The single audio element an episode plays through, and a handle to stop it.
+  const episodeAudioRef = useRef<HTMLAudioElement | null>(null)
+  const cancelEpisodeRef = useRef<(() => void) | null>(null)
   const [nowTopic, setNowTopic] = useState(rotationRef.current[0])
+  // Generation progress, so the wait before the first line is not a blank screen.
+  const [buildProgress, setBuildProgress] = useState<{ done: number; total: number } | null>(null)
   // Media Session handlers are registered once, before these functions exist;
   // refs let that single registration reach the current implementations.
   const startLoopRef = useRef<(() => void) | null>(null)
@@ -152,8 +172,14 @@ export default function PodcastPlayer() {
   useEffect(() => { topicRef.current = topic }, [topic])
   useEffect(() => { difficultyRef.current = difficulty }, [difficulty])
   useEffect(() => { voiceRef.current = voiceFor }, [voiceFor])
-  useEffect(() => { speedRef.current = speed }, [speed])
-  useEffect(() => { volumeRef.current = volume }, [volume])
+  useEffect(() => {
+    speedRef.current = speed
+    if (episodeAudioRef.current) episodeAudioRef.current.playbackRate = Math.max(0.1, speed)
+  }, [speed])
+  useEffect(() => {
+    volumeRef.current = volume
+    if (episodeAudioRef.current) episodeAudioRef.current.volume = Math.max(0, Math.min(1, volume))
+  }, [volume])
   useEffect(() => { initBackgroundAudio() }, [])
 
   // Car head units render none of this page — they read Media Session metadata
@@ -166,6 +192,7 @@ export default function PodcastPlayer() {
         setIsPlaying(false)
         setIsGenerating(false)
         cancelSpeech()
+        cancelEpisodeRef.current?.()
         skipGapRef.current?.()
       },
       onNextTopic: () => nextTopicRef.current?.(),
@@ -184,6 +211,7 @@ export default function PodcastPlayer() {
       loopGenRef.current++       // invalidates the running loop's gen check
       isPlayingRef.current = false
       cancelSpeech()             // stops audio + resolves any pending promise
+      cancelEpisodeRef.current?.()
       skipGapRef.current?.()     // releases any gap timer
     }
   }, [])
@@ -205,117 +233,167 @@ export default function PodcastPlayer() {
     })
   }
 
-  const runPodcastLoop = useCallback(async (gen: number) => {
-    // nextLinePrefetch resolves with the NEXT turn's text *and* its audio.
-    // Both are started while the current line is still speaking, so neither the
-    // model call nor the (slower) speech synthesis sits on the critical path.
-    type Prefetched = { text: string; audio: Promise<Blob | null>; plan: PlannedSegment } | null
-    let nextLinePrefetch: Promise<Prefetched> | null = null
+  /**
+   * Play one episode as a single audio element.
+   *
+   * Resolves when it finishes or is cancelled. The transcript highlight comes
+   * from `timeupdate` against the segment offsets, so many lines stay in sync
+   * while the browser sees a single uninterrupted media element — which is what
+   * lets it keep playing with the screen off.
+   */
+  const playEpisode = useCallback((episode: Episode, gen: number) => {
+    return new Promise<void>((resolve) => {
+      const url = URL.createObjectURL(episode.audio)
+      const audio = new Audio(url)
+      audio.playbackRate = Math.max(0.1, speedRef.current)
+      audio.volume = Math.max(0, Math.min(1, volumeRef.current))
+      episodeAudioRef.current = audio
 
-    while (isPlayingRef.current && loopGenRef.current === gen) {
-      const plan = planSegment(segmentIndexRef.current, rotationRef.current)
-      const speaker = plan.speaker
-
-      let line: string | null = null
-      // Audio for this line, if it was fetched ahead of time.
-      let audioPromise: Promise<Blob | null> | null = null
-
-      if (nextLinePrefetch) {
-        // Line was pre-fetched while the previous one was playing
-        setIsGenerating(true)
-        const pre = await nextLinePrefetch
-        nextLinePrefetch = null
-        line = pre?.text ?? null
-        audioPromise = pre?.audio ?? null
-        setIsGenerating(false)
-      } else {
-        // First turn or after a reset — nothing is warm yet, so this one waits.
-        setIsGenerating(true)
-        line = await fetchWithRetry(
-          plan.topic, difficultyRef.current, speaker, historyRef.current,
-          plan.kind, plan.move, situationRef.current ?? undefined
-        )
-        setIsGenerating(false)
+      let done = false
+      const finish = () => {
+        if (done) return
+        done = true
+        audio.onended = null
+        audio.onerror = null
+        audio.ontimeupdate = null
+        audio.pause()
+        URL.revokeObjectURL(url)
+        if (episodeAudioRef.current === audio) episodeAudioRef.current = null
+        resolve()
       }
 
-      // A new topic gets a new scene.
-      if (plan.startsTopic || !situationRef.current) situationRef.current = pickSituation()
+      // Lets pause/skip stop playback from outside this promise.
+      cancelEpisodeRef.current = finish
 
-      // Announce the topic to the car before its first line plays.
-      if (plan.startsTopic) {
-        setNowTopic(plan.topic)
+      let lastId: string | null = null
+      audio.ontimeupdate = () => {
+        if (loopGenRef.current !== gen) { finish(); return }
+        const seg = segmentAt(episode.segments, audio.currentTime)
+        if (!seg) return
+        const id = `${seg.index}`
+        if (id !== lastId) {
+          lastId = id
+          setCurrentSpeaker(seg.speaker)
+          setTranscript((prev) =>
+            prev.map((l) => ({ ...l, isPlaying: l.id === id }))
+          )
+          if (seg.topic) setNowTopic(seg.topic)
+        }
+      }
+
+      audio.onended = finish
+      audio.onerror = finish
+      audio.play().catch(finish)
+    })
+  }, [])
+
+  /**
+   * Play in episodes rather than line by line.
+   *
+   * A queue of clips needs JS to run between them, and a backgrounded tab has
+   * its timers throttled — so the old loop stopped when the screen locked,
+   * which is exactly when a driver needs it. A whole topic is generated ahead,
+   * spliced into one file, and played as a single audio element, which the
+   * browser keeps playing in the background on its own.
+   */
+  const runPodcastLoop = useCallback(async (gen: number) => {
+    const alive = () => isPlayingRef.current && loopGenRef.current === gen
+
+    const makeDeps = (): BuildDeps => ({
+      fetchText: (plan, history) =>
+        fetchWithRetry(
+          plan.topic, difficultyRef.current, plan.speaker, history,
+          plan.kind, plan.move, situationRef.current ?? undefined
+        ),
+      fetchAudio: async (plan, text) => {
+        const blob = await prefetchLineAudio(
+          text, plan.speaker, voiceRef.current(roleForSpeaker(plan.speaker))
+        )
+        return blob ? blob.arrayBuffer() : null
+      },
+      onProgress: (done, total) => { if (alive()) setBuildProgress({ done, total }) },
+      shouldContinue: alive,
+    })
+
+    const build = (startIndex: number, count: number) =>
+      buildEpisode(
+        {
+          startIndex,
+          count,
+          rotation: rotationRef.current,
+          situationFor: () => situationRef.current ?? pickSituation(),
+        },
+        makeDeps()
+      )
+
+    // The first stretch is short so playback starts sooner; later ones are full
+    // length, generated while the previous is still playing.
+    // Annotated because the next-episode promise below refers back to this,
+    // which TypeScript otherwise sees as circular.
+    let episode: Episode | null = await build(segmentIndexRef.current, FIRST_EPISODE_LENGTH)
+    setBuildProgress(null)
+
+    if (!episode) {
+      if (alive()) {
+        setErrorMsg("无法生成内容，请重试")
+        isPlayingRef.current = false
+        setIsPlaying(false)
+      }
+      return
+    }
+
+    let nextEpisode: Promise<Episode | null> | null = null
+
+
+    while (alive() && episode) {
+      situationRef.current = situationRef.current ?? pickSituation()
+      segmentIndexRef.current = episode.nextIndex
+
+      // Show the whole episode at once; the highlight follows playback.
+      setTranscript(
+        episode.segments.map((s) => ({
+          id: `${s.index}`,
+          speaker: s.speaker,
+          content: s.text,
+          isPlaying: false,
+          timestamp: Date.now(),
+        }))
+      )
+      historyRef.current = episode.segments
+        .slice(-8)
+        .map((s) => ({ speaker: s.speaker, content: s.text }))
+
+      const firstTopic = episode.segments[0]?.topic
+      if (firstTopic) {
+        setNowTopic(firstTopic)
         updateMediaSessionMetadata({
-          topicLabel: plan.topic.label,
-          topicLabelZh: plan.topic.labelZh,
-          speakerLabel: speaker === "A" ? "Kenji · 日本語" : "Wei · 中文",
+          topicLabel: firstTopic.label,
+          topicLabelZh: firstTopic.labelZh,
+          speakerLabel: "Kenji · Wei",
         })
       }
 
-      if (!isPlayingRef.current || loopGenRef.current !== gen) break
-      if (!line?.trim()) { setErrorMsg("连接失败，请重试"); isPlayingRef.current = false; setIsPlaying(false); break }
-      setErrorMsg(null)
+      // Start the next episode now, so the changeover is silent.
+      const startNext: number = episode.nextIndex
+      nextEpisode = (async () => {
+        if (!alive()) return null
+        situationRef.current = pickSituation()
+        return build(startNext, DEFAULT_EPISODE_LENGTH)
+      })()
 
-      const newLine: PodcastLine = {
-        id: crypto.randomUUID(),
-        speaker,
-        content: line,
-        isPlaying: true,
-        timestamp: Date.now(),
+      await playEpisode(episode, gen)
+      if (!alive()) break
+
+      episode = await nextEpisode
+      nextEpisode = null
+      if (!episode && alive()) {
+        setErrorMsg("生成中断，请重试")
+        isPlayingRef.current = false
+        setIsPlaying(false)
       }
-      historyRef.current = [...historyRef.current.slice(-7), { speaker, content: line }]
-      setTranscript(prev => [
-        ...prev.slice(-(MAX_TRANSCRIPT - 1)).map(l => ({ ...l, isPlaying: false })),
-        newLine,
-      ])
-
-      // Kick off the next segment's fetch + gap in parallel with the current line
-      const nextPlan = planSegment(segmentIndexRef.current + 1, rotationRef.current)
-      const nextSpeaker = nextPlan.speaker
-      const snapHistory = historyRef.current
-      const snapDiff = difficultyRef.current
-      // A topic change mid-prefetch must not mix the old scene into the new topic.
-      const snapSituation = nextPlan.startsTopic
-        ? pickSituation()
-        : (situationRef.current ?? pickSituation())
-      const myGen = gen
-
-      nextLinePrefetch = gap(GAP_MS).then(async () => {
-        if (!isPlayingRef.current || loopGenRef.current !== myGen) return null
-        const text = await fetchWithRetry(
-          nextPlan.topic, snapDiff, nextSpeaker, snapHistory,
-          nextPlan.kind, nextPlan.move, snapSituation
-        )
-        if (!text?.trim()) return null
-        if (!isPlayingRef.current || loopGenRef.current !== myGen) return null
-        // Start synthesis immediately and do NOT await it — it runs while the
-        // current line is still playing, which is the whole point.
-        return {
-          text,
-          plan: nextPlan,
-          audio: prefetchLineAudio(text, nextSpeaker, voiceRef.current(roleForSpeaker(nextSpeaker))),
-        }
-      })
-
-      const speakText = toSpeechText(line)
-      // Awaiting here costs nothing when the prefetch already finished during
-      // playback of the previous line.
-      const prefetchedAudio = audioPromise ? await audioPromise : null
-      const usedAI = await speakLine(
-        speakText, speaker, speedRef.current, volumeRef.current, prefetchedAudio,
-        voiceRef.current(roleForSpeaker(speaker))
-      )
-      if (ttsModeRef.current === "ai") setAiWorking(usedAI)
-
-      setTranscript(prev => prev.map(l => l.id === newLine.id ? { ...l, isPlaying: false } : l))
-
-      if (!isPlayingRef.current || loopGenRef.current !== gen) break
-
-      // Advance the playhead; the planner derives speaker and topic from it.
-      segmentIndexRef.current += 1
-      currentSpeakerRef.current = nextSpeaker
-      setCurrentSpeaker(nextSpeaker)
     }
-  }, [gap])
+  }, [playEpisode])
+
 
   function startLoop() {
     // Reorder on a fresh start so no two sessions run the same sequence. Safe
@@ -336,6 +414,7 @@ export default function PodcastPlayer() {
     loopGenRef.current++
     isPlayingRef.current = false
     cancelSpeech()
+    cancelEpisodeRef.current?.()
     skipGapRef.current?.()
     historyRef.current = []
     currentSpeakerRef.current = "A"
@@ -350,8 +429,25 @@ export default function PodcastPlayer() {
   }
 
   function handlePlay() { if (!isPlayingRef.current) startLoop() }
-  function handlePause() { isPlayingRef.current = false; setIsPlaying(false); setIsGenerating(false); cancelSpeech(); skipGapRef.current?.() }
-  function handleSkip() { cancelSpeech(); skipGapRef.current?.() }
+  function handlePause() {
+    isPlayingRef.current = false
+    setIsPlaying(false)
+    setIsGenerating(false)
+    setBuildProgress(null)
+    cancelSpeech()
+    cancelEpisodeRef.current?.()   // an episode plays as one element, not via speakLine
+    skipGapRef.current?.()
+  }
+  function handleSkip() {
+    // Within an episode, skip forward to the next segment boundary.
+    const audio = episodeAudioRef.current
+    if (audio) {
+      audio.currentTime = Math.min(audio.currentTime + 8, (audio.duration || 0) - 0.05)
+      return
+    }
+    cancelSpeech()
+    skipGapRef.current?.()
+  }
 
   /** Jump to the start of the next topic in the rotation. */
   const handleNextTopic = useCallback(() => {
@@ -361,6 +457,7 @@ export default function PodcastPlayer() {
     setCurrentSpeaker("A")
     historyRef.current = []   // a new topic should not inherit the old thread
     cancelSpeech()
+    cancelEpisodeRef.current?.()
     skipGapRef.current?.()
   }, [])
 
@@ -519,7 +616,8 @@ export default function PodcastPlayer() {
 
       {/* Transcript */}
       <div className="flex-1 min-h-0">
-        <PodcastTranscript transcript={transcript} isGenerating={isGenerating} currentSpeaker={currentSpeaker} />
+        <PodcastTranscript
+          buildProgress={buildProgress} transcript={transcript} isGenerating={isGenerating} currentSpeaker={currentSpeaker} />
       </div>
 
       {/* Controls */}

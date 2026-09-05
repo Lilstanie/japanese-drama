@@ -444,16 +444,46 @@ implemented and feature-detected, but CarPlay and Android Auto behaviour can
 only be confirmed in a car. Treat the table above as intent until it has been
 driven.
 
-### Known limitation: backgrounding
+### Background playback: episodes, not lines
 
-The podcast generates each line as it plays. If the browser is backgrounded or
-the screen locks, JS timers and network requests are throttled, so generation
-stalls once the buffered line finishes — the currently playing audio completes,
-then it stops. `initBackgroundAudio()` does not change this.
+The podcast used to generate each line as it played, which stopped the moment
+the screen locked — a queue of clips needs JS between them, and a backgrounded
+tab has its timers throttled.
 
-Fixing it properly means pre-generating a whole episode up front so playback is
-a queue of ready audio rather than a live generator. That is the next change if
-locked-screen listening is needed.
+It now generates a stretch of conversation ahead, splices it into **one audio
+file**, and plays that as a single element. A browser keeps one media element
+playing in the background on its own, with no JS required.
+
+| Piece | Role |
+|-------|------|
+| `lib/wav.ts` | Parses and concatenates PCM WAV, returning each clip's offset |
+| `lib/podcast-episode.ts` | Generates N segments, splices them, reports where each starts |
+| `playEpisode()` in the player | Plays the file; `timeupdate` drives the transcript highlight |
+
+The offsets are what keep a per-line transcript working now that many lines are
+a single element.
+
+**Only works with uncompressed audio.** Camb returns PCM WAV, which splices.
+ElevenLabs returns MP3, which does not — `buildEpisode` returns null there and
+the caller falls back to per-clip playback, which still stops on lock.
+
+#### Episode lengths are set by measurement, not taste
+
+Measured against the real providers: **~3.1s to generate a segment, ~9.3s to
+play one.** A 12-segment episode therefore takes ~38s to build, and the opening
+stretch has to play for longer than that or the changeover stalls.
+
+| Opening length | Wait before audio | Plays for | Next episode needs | Margin |
+|---------------|-------------------|-----------|--------------------|--------|
+| 4 segments | 12.6s | 37.1s | 37.8s | **−0.7s — stalls** |
+| 6 segments | 18.9s | 55.7s | 37.8s | +17.9s |
+
+`FIRST_EPISODE_LENGTH` is 6 for that reason. Four was the intuitive choice and
+was 0.7 seconds short of working. Re-measure before changing either constant,
+especially if the provider or voice changes.
+
+A whole topic is ~10MB of PCM in memory. Blob URLs are revoked as episodes end,
+so only the playing episode and the one being built are held.
 
 ## 11) Voice / TTS Options
 

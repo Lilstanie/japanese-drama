@@ -8,9 +8,11 @@ interface Props {
   transcript: PodcastLine[]
   isGenerating: boolean
   currentSpeaker: "A" | "B"
+  /** Episode generation progress — a whole topic is prepared before it plays. */
+  buildProgress?: { done: number; total: number } | null
 }
 
-export default function PodcastTranscript({ transcript, isGenerating, currentSpeaker }: Props) {
+export default function PodcastTranscript({ transcript, isGenerating, currentSpeaker, buildProgress }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [pinned, setPinned] = useState(true) // true = auto-scroll to bottom
@@ -40,7 +42,27 @@ export default function PodcastTranscript({ transcript, isGenerating, currentSpe
         onScroll={handleScroll}
         className="h-full overflow-y-auto px-4 py-4 flex flex-col gap-3"
       >
-        {transcript.length === 0 && !isGenerating && (
+        {transcript.length === 0 && buildProgress && (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3">
+            <p className="text-sm" style={{ color: "#a07850" }}>
+              正在准备节目… {buildProgress.done}/{buildProgress.total}
+            </p>
+            <div className="w-48 h-1 rounded-full overflow-hidden" style={{ background: "#3d2010" }}>
+              <div
+                className="h-full transition-all duration-300"
+                style={{
+                  background: "#f59e0b",
+                  width: `${Math.round((buildProgress.done / Math.max(1, buildProgress.total)) * 100)}%`,
+                }}
+              />
+            </div>
+            <p className="text-xs" style={{ color: "#5c3d1e" }}>
+              整段生成后可锁屏播放
+            </p>
+          </div>
+        )}
+
+        {transcript.length === 0 && !isGenerating && !buildProgress && (
           <div className="flex-1 flex items-center justify-center">
             <p className="text-sm" style={{ color: "#5c3d1e" }}>
               ▶ を押して会話を始める · Press ▶ to start
