@@ -329,7 +329,163 @@ katakana dictionary. Add tests alongside; the suite is mutation-checked.
 すみません into すみませ+ん. kuromoji is accurate but ships a 40MB dictionary,
 which is far too heavy for client-side use.
 
-## 10) Voice / TTS Options
+## 10) Podcast for Driving
+
+The podcast is built to be listened to at the wheel, where the screen cannot be
+read or reliably touched.
+
+### Topic rotation
+
+`lib/podcast-plan.ts` decides what plays next as a pure function of the segment
+index, so it is testable without a browser or a model.
+
+- A topic runs for `SEGMENTS_PER_TOPIC` (12) segments, then rotation advances.
+- `buildRotation()` orders topics so consecutive ones come from different
+  categories. It picks from whichever *other* category has the most remaining —
+  taking merely the first different one lets the largest category (7 日常 of 24)
+  run out last and cluster at the end.
+- The topic dropdown chooses where rotation **starts**, not the only topic.
+- 24 topics × 12 segments ≈ 40+ minutes before anything repeats.
+
+### Chinese explanations
+
+Every 6th segment, Wei stops chatting and explains the previous Japanese line in
+Chinese — meaning first, then one word or grammar point, under 50 characters.
+Subtitles are unreadable while driving, so this is the only channel an
+explanation has.
+
+Two constraints encoded in `planSegment()`: only Wei explains (Kenji speaks no
+Chinese, and a Japanese voice reading Chinese sounds wrong), and an explanation
+never opens a topic (there is nothing yet to explain). The offset matters —
+gating on `index % EXPLAIN_EVERY` lands only on Kenji's even indices, so no
+explanation ever plays while the code still reads correctly.
+
+### Why the conversation used to loop
+
+A real transcript degenerated into both speakers trading 「感想を聞かせて」/
+「等我去了告诉你」 for eight turns. **This was not a context-window problem** —
+the model sees 8 turns of history, and the whole loop happened inside it. It
+could see itself repeating.
+
+The cause was that nothing told it to advance. The prompt said only: speak
+Japanese, be casual, 1-2 sentences. Natural + short + agreeable converges on
+Japanese closure formulas (〜してみてね, 楽しみにしてる, 感想を聞かせて), which
+are *always* a valid reply — a stable attractor neither speaker has a reason to
+leave, while every individual line still reads fine.
+
+Three changes, in order of effect:
+
+1. **Every turn has a job.** `planSegment()` assigns a `ConversationMove` —
+   open / ask / detail / contrast / anecdote / disagree / shift / close — cycled
+   across a topic so it opens, develops, deepens, then lands. `disagree` is the
+   important one: endless agreement is how the loop starts.
+2. **The closure formulas are banned outright** in the prompt, along with
+   restating what the other speaker just said.
+3. **`frequency_penalty` 0.6 / `presence_penalty` 0.5**, which the sampler
+   applies to exactly the phrase-level repetition at issue.
+
+Measured on the same topic that looped, the conversation now produces concrete
+detail (名古屋の味噌かつ丼, 680円, 道頓堀), a real disagreement
+(「味が濃すぎてちょっと食べきれなかった」) and personal anecdotes, with no
+repeated turns.
+
+Note for tuning: an explanation turn must NOT receive the full conversation plus
+"say your next line" — that instruction beats the system prompt and it carries
+on chatting. It gets only the line being explained.
+
+### Randomness: what sampling can and cannot do
+
+| Parameter | Effect | Useful here |
+|-----------|--------|-------------|
+| `temperature` | Flatness of the token distribution | Limited. Already at the default 1.0, and above ~1.2 the Japanese degrades and the `漢字(かんじ)` furigana format breaks — which silently breaks ruby, romaji **and** speech at once |
+| `top_p` / `top_k` | Restrict the candidate set | Tune one *or* temperature, not both |
+| `seed` | Makes output reproducible | The opposite of what is wanted |
+| `frequency_penalty` / `presence_penalty` | Suppress repetition | In use at 0.6 / 0.5 |
+
+**Sampling varies wording, not shape.** Measured at the default temperature,
+five openings on the same topic were all "time + place + what I ate + んだけど" —
+different dishes and districts every time, identical frame — because a single
+`open` instruction named time and place. No temperature setting fixes that.
+
+What does: varying the *input*.
+
+- **Several phrasings per move**, picked per request. `open` can now ask for a
+  scene, a question with no preamble, a stated opinion, or a passing thought.
+- **A situation per topic** — season, setting and mood, e.g. "梅雨で毎日雨 ·
+  コンビニの前で立ち話 · 二人とも少し空腹". Same seed, different scene.
+- **A shuffled rotation each session**, so a drive does not always open the same
+  way. Shuffling runs *before* `buildRotation`, so the no-same-category-twice
+  rule still holds — there is a test for that.
+
+After the change the same five openings came out as a wistful remark, a stated
+preference, a bare question, a scene, and a one-line question — different frames,
+all incorporating the weather.
+
+`pickSituation()` and `shuffle()` accept an injectable random function so the
+behaviour is testable.
+
+### Car head units (CarPlay / Android Auto)
+
+`lib/media-session.ts` supplies what the car actually renders — it does not draw
+the page. Metadata carries the topic as the title and the speaker as the artist,
+since those are what a car screen shows largest.
+
+| Car control | Action |
+|-------------|--------|
+| Play / Pause | Start or stop the loop |
+| Next track | Skip to the next topic |
+| Previous track / seek back | Replay the current line |
+
+"Previous" replays rather than going back a topic: at the wheel the thing you
+reach for is "say that again", not "rewind ten minutes".
+
+**Not verified on real hardware.** The Media Session calls and metadata are
+implemented and feature-detected, but CarPlay and Android Auto behaviour can
+only be confirmed in a car. Treat the table above as intent until it has been
+driven.
+
+### Background playback: episodes, not lines
+
+The podcast used to generate each line as it played, which stopped the moment
+the screen locked — a queue of clips needs JS between them, and a backgrounded
+tab has its timers throttled.
+
+It now generates a stretch of conversation ahead, splices it into **one audio
+file**, and plays that as a single element. A browser keeps one media element
+playing in the background on its own, with no JS required.
+
+| Piece | Role |
+|-------|------|
+| `lib/wav.ts` | Parses and concatenates PCM WAV, returning each clip's offset |
+| `lib/podcast-episode.ts` | Generates N segments, splices them, reports where each starts |
+| `playEpisode()` in the player | Plays the file; `timeupdate` drives the transcript highlight |
+
+The offsets are what keep a per-line transcript working now that many lines are
+a single element.
+
+**Only works with uncompressed audio.** Camb returns PCM WAV, which splices.
+ElevenLabs returns MP3, which does not — `buildEpisode` returns null there and
+the caller falls back to per-clip playback, which still stops on lock.
+
+#### Episode lengths are set by measurement, not taste
+
+Measured against the real providers: **~3.1s to generate a segment, ~9.3s to
+play one.** A 12-segment episode therefore takes ~38s to build, and the opening
+stretch has to play for longer than that or the changeover stalls.
+
+| Opening length | Wait before audio | Plays for | Next episode needs | Margin |
+|---------------|-------------------|-----------|--------------------|--------|
+| 4 segments | 12.6s | 37.1s | 37.8s | **−0.7s — stalls** |
+| 6 segments | 18.9s | 55.7s | 37.8s | +17.9s |
+
+`FIRST_EPISODE_LENGTH` is 6 for that reason. Four was the intuitive choice and
+was 0.7 seconds short of working. Re-measure before changing either constant,
+especially if the provider or voice changes.
+
+A whole topic is ~10MB of PCM in memory. Blob URLs are revoked as episodes end,
+so only the playing episode and the one being built are held.
+
+## 11) Voice / TTS Options
 
 Provider is chosen by `TTS_PROVIDER`, or auto-detected from whichever key is
 present (ElevenLabs preferred for latency). The client just plays whatever bytes

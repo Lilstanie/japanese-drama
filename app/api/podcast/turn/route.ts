@@ -20,34 +20,195 @@ const SYSTEM_B = (topic: string, difficulty: string, seed: string) =>
 背景：${seed}
 难度参考：${difficulty}`
 
+/**
+ * Wei stepping out of the conversation to explain the Japanese just spoken.
+ *
+ * This is the only way a learner gets an explanation while driving — subtitles
+ * are unreadable at the wheel — so it names the meaning and one concrete point,
+ * and stays short enough not to derail the conversation it interrupts.
+ */
+/**
+ * Per-turn instruction. Without one the model settles into agreeable closure
+ * formulas and the conversation loops while every line still reads naturally.
+ */
+/**
+ * Several phrasings per move, chosen at random.
+ *
+ * One phrasing per move fixes the *shape* of every turn: with a single `open`
+ * instruction naming time and place, five openings on the same topic all came
+ * out as "time + place + what I ate + んだけど". Sampling temperature varies the
+ * nouns; only a different instruction varies the frame.
+ */
+const MOVE_JA: Record<string, string[]> = {
+  open: [
+    "この話題を、具体的な場面から始めてください。いつ・どこで・何が、を一つ入れること。",
+    "いきなり質問から始めてください。挨拶や前置きは無し。",
+    "自分の意見を先に言い切ってから始めてください。理由は後回しでいい。",
+    "最近気づいたことを、独り言のように話し始めてください。",
+  ],
+  ask: [
+    "相手にまだ聞いていないことを、具体的に一つ質問してください。",
+    "相手の言ったことの中で、一番引っかかった部分だけを聞き返してください。",
+    "答えにくい質問を一つしてください。相手が考え込むような。",
+  ],
+  detail: [
+    "固有名詞・数字・地名のどれかを必ず一つ入れて、新しい情報を足してください。",
+    "値段か時間を具体的に言ってください。だいたいではなく数字で。",
+    "あまり知られていない事実を一つ教えてください。",
+  ],
+  contrast: [
+    "日本と中国の違いを一つ挙げてください。相手の国のことは決めつけず、聞く形にすること。",
+    "昔と今で変わったことを一つ挙げてください。",
+    "自分の地元と東京の違いを一つ話してください。",
+  ],
+  anecdote: [
+    "自分の体験を短く一つ語ってください。失敗談でも構いません。",
+    "恥ずかしかった出来事を一つ話してください。",
+    "予想と全然違った経験を一つ話してください。",
+  ],
+  disagree: [
+    "相手に軽く反論するか、自分は苦手だと正直に言ってください。同意で終わらせないこと。",
+    "相手の意見に「でも」で切り返してください。",
+    "実は自分は逆の意見だと打ち明けてください。",
+  ],
+  shift: [
+    "同じ話題の中で、まだ話していない別の角度に話を移してください。",
+    "急に思い出したこととして、関係のありそうな別の話を始めてください。",
+    "話が逸れていることに気づいて、少し戻してください。",
+  ],
+  close: [
+    "この話題に短く区切りをつけてください。ただし次の約束はしないこと。",
+    "自分なりの結論を一言だけ言ってください。",
+    "まだ納得していない様子で、この話題を一旦置いてください。",
+  ],
+}
+
+const MOVE_ZH: Record<string, string[]> = {
+  open: [
+    "从一个具体场景开头，说清楚时间、地点或人物中的一个。",
+    "直接抛一个问题开场，不要寒暄。",
+    "先把自己的观点说死，理由放后面。",
+  ],
+  ask: [
+    "问对方一个还没问过的、具体的问题。",
+    "只揪住对方刚说的一个细节追问。",
+    "问一个不太好回答的问题，让对方想一下。",
+  ],
+  detail: [
+    "补充一条新信息，必须包含一个具体的名字、数字或地名。",
+    "说一个具体的价格或时间，要数字，不要「大概」。",
+    "讲一个不太为人知的冷知识。",
+  ],
+  contrast: [
+    "说一个中国和日本的差别，用请教的语气，不要替对方下结论。",
+    "说一个你老家和北上广的差别。",
+    "说一件以前和现在不一样的事。",
+  ],
+  anecdote: [
+    "讲一件你自己的具体经历，可以是糗事。",
+    "讲一件让你很尴尬的事。",
+    "讲一次跟你预想完全相反的经历。",
+  ],
+  disagree: [
+    "对对方的说法提出一点不同意见，或者坦白说自己不喜欢。不要一味附和。",
+    "用「可是」直接顶回去。",
+    "承认你其实是相反的看法。",
+  ],
+  shift: [
+    "在同一个话题里，转到一个还没聊过的角度。",
+    "像突然想起来一样，扯到一件相关的别的事。",
+    "发现话题跑偏了，往回拉一点。",
+  ],
+  close: [
+    "给这个话题做一个简短的收尾，但不要约下次。",
+    "只说一句你自己的结论。",
+    "带着还没想通的语气，先把这个话题放一放。",
+  ],
+}
+
+/** Pick one phrasing. Random per request, so the same move varies run to run. */
+const pickMove = (table: Record<string, string[]>, move: string): string => {
+  const options = table[move] ?? table.detail!
+  return options[Math.floor(Math.random() * options.length)]!
+}
+
+/**
+ * Japanese closure formulas are a stable attractor: they are always a valid
+ * reply, so once both speakers enter that mode neither leaves, and the
+ * conversation loops on 「感想を聞かせて」/「楽しみにしてる」 forever.
+ */
+const NO_LOOP_JA = `絶対に守ること：
+- 相手が今言ったことを言い換えて返さない。必ず新しい中身を足すこと。
+- 「〜してみてね」「楽しみにしてるね」「感想を聞かせて」「また今度」で終わらせない。
+- 会話をまとめようとしない。まだ続く前提で話すこと。`
+
+const NO_LOOP_ZH = `绝对要求：
+- 不要把对方刚说的话换个说法再说一遍，每次必须加入新内容。
+- 不要用「期待」「到时候告诉我」「下次一起」这类客套话收尾。
+- 不要试图总结或结束对话，就当聊天还会继续。`
+
+const SYSTEM_EXPLAIN = (difficulty: string) =>
+  `你是Wei，正在和日本朋友Kenji聊天。现在请你短暂地停一下，用中文向听众解释Kenji刚才说的那句日语。
+
+只用中文。50字以内。先说这句话的意思，再点出一个词或语法点。
+说话像朋友随口讲解，不要像教科书，不要列条目，不要加"Wei:"前缀。
+不要重复整句日语原文，最多引用一两个关键词。
+学习者水平：${difficulty}`
+
 export async function POST(request: Request) {
-  const { topic, difficulty, seed, speaker, history } = (await request.json()) as {
+  const { topic, difficulty, seed, speaker, history, kind, move, situation } = (await request.json()) as {
     topic: string
     difficulty: string
     seed: string
     speaker: "A" | "B"
     history: { speaker: "A" | "B"; content: string }[]
+    kind?: "dialogue" | "explain"
+    move?: string
+    situation?: { season: string; setting: string; mood: string }
   }
 
   // Built per request, not at module scope: Next evaluates route modules while
   // collecting page data at build time, where no key exists.
   const client = createAIClient()
 
-  const system = speaker === "A" ? SYSTEM_A(topic, difficulty, seed) : SYSTEM_B(topic, difficulty, seed)
+  // The situation is what makes two runs of the same topic actually differ:
+  // same seed, different season, place and mood.
+  const situationJa = situation
+    ? `\n今の状況: ${situation.season}。${situation.setting}。${situation.mood}。`
+    : ""
+  const situationZh = situation
+    ? `\n当前情境：${situation.season}。${situation.setting}。${situation.mood}。`
+    : ""
+
+  const system =
+    kind === "explain"
+      ? SYSTEM_EXPLAIN(difficulty)
+      : speaker === "A"
+        ? `${SYSTEM_A(topic, difficulty, seed)}${situationJa}\n\n今回の役割: ${pickMove(MOVE_JA, move ?? "detail")}\n\n${NO_LOOP_JA}`
+        : `${SYSTEM_B(topic, difficulty, seed)}${situationZh}\n\n本轮任务：${pickMove(MOVE_ZH, move ?? "detail")}\n\n${NO_LOOP_ZH}`
 
   const recentHistory = history.slice(-8)
   const formatted = recentHistory
     .map((h) => `${h.speaker === "A" ? "Kenji" : "Wei"}: ${h.content}`)
     .join("\n")
 
+  // An explanation needs only the line being explained. Handing it the whole
+  // conversation plus "say your next line" made it carry on chatting instead —
+  // the concrete task in the user message beat the system prompt.
+  const lastJapanese = [...history].reverse().find((h) => h.speaker === "A")?.content
+
   const userMessage =
-    speaker === "A"
-      ? formatted
-        ? `これまでの会話:\n${formatted}\n\nあなたの次のセリフを言ってください。`
-        : "会話を自然に始めてください。"
-      : formatted
-      ? `对话记录（用中文回答！）:\n${formatted}\n\n请用中文说你的下一句话。`
-      : "请用中文开始对话，说第一句话。"
+    kind === "explain"
+      ? lastJapanese
+        ? `请解释下面这句日语：\n\n${lastJapanese}\n\n用中文说出它的意思，再点出一个词或语法点。不要接着聊天，不要提问。`
+        : "请用中文简单说明日语中「〜てください」的用法。"
+      : speaker === "A"
+        ? formatted
+          ? `これまでの会話:\n${formatted}\n\nあなたの次のセリフを言ってください。`
+          : "会話を自然に始めてください。"
+        : formatted
+          ? `对话记录（用中文回答！）:\n${formatted}\n\n请用中文说你的下一句话。`
+          : "请用中文开始对话，说第一句话。"
 
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
@@ -55,6 +216,10 @@ export async function POST(request: Request) {
       try {
         const response = await client.chat.completions.create({
           ...chatParams(200),
+          // The prompt does most of the work, but repeating a phrase the model
+          // just produced is exactly what these penalise.
+          frequency_penalty: 0.6,
+          presence_penalty: 0.5,
           messages: [
             { role: "system", content: system },
             { role: "user", content: userMessage },
