@@ -132,11 +132,17 @@ export default function PodcastPlayer() {
   const skipGapRef = useRef<(() => void) | null>(null)
   // Rotation order and playhead. The loop reads these, so they are refs; the
   // rotation is rebuilt whenever the starting topic changes.
-  const rotationRef = useRef(buildRotation(shuffle(PODCAST_TOPICS)))
+  // Deterministic on purpose. Shuffling here ran Math.random() during render,
+  // on the server as well as the client, so the two disagreed about the first
+  // topic and hydration failed. Randomisation happens on play instead — a
+  // client-only event, and the only moment the order starts to matter.
+  const rotationRef = useRef(buildRotation(PODCAST_TOPICS))
   const segmentIndexRef = useRef(0)
   // One situation per topic — season, setting and mood — so two runs of the
   // same topic differ in more than word choice.
-  const situationRef = useRef<Situation>(pickSituation())
+  // Also deferred: as a useRef argument this ran on every render, including on
+  // the server, for a value only the first render keeps.
+  const situationRef = useRef<Situation | null>(null)
   const [nowTopic, setNowTopic] = useState(rotationRef.current[0])
   // Media Session handlers are registered once, before these functions exist;
   // refs let that single registration reach the current implementations.
@@ -227,13 +233,13 @@ export default function PodcastPlayer() {
         setIsGenerating(true)
         line = await fetchWithRetry(
           plan.topic, difficultyRef.current, speaker, historyRef.current,
-          plan.kind, plan.move, situationRef.current
+          plan.kind, plan.move, situationRef.current ?? undefined
         )
         setIsGenerating(false)
       }
 
       // A new topic gets a new scene.
-      if (plan.startsTopic) situationRef.current = pickSituation()
+      if (plan.startsTopic || !situationRef.current) situationRef.current = pickSituation()
 
       // Announce the topic to the car before its first line plays.
       if (plan.startsTopic) {
@@ -268,7 +274,9 @@ export default function PodcastPlayer() {
       const snapHistory = historyRef.current
       const snapDiff = difficultyRef.current
       // A topic change mid-prefetch must not mix the old scene into the new topic.
-      const snapSituation = nextPlan.startsTopic ? pickSituation() : situationRef.current
+      const snapSituation = nextPlan.startsTopic
+        ? pickSituation()
+        : (situationRef.current ?? pickSituation())
       const myGen = gen
 
       nextLinePrefetch = gap(GAP_MS).then(async () => {
@@ -310,6 +318,13 @@ export default function PodcastPlayer() {
   }, [gap])
 
   function startLoop() {
+    // Reorder on a fresh start so no two sessions run the same sequence. Safe
+    // here and not during render: this only ever runs from a user action.
+    if (segmentIndexRef.current === 0) {
+      rotationRef.current = buildRotation(shuffle(PODCAST_TOPICS), topicRef.current.id)
+      situationRef.current = pickSituation()
+      setNowTopic(rotationRef.current[0])
+    }
     const gen = ++loopGenRef.current
     isPlayingRef.current = true
     setIsPlaying(true)
@@ -364,6 +379,7 @@ export default function PodcastPlayer() {
     // topic rather than the only one.
     rotationRef.current = buildRotation(shuffle(PODCAST_TOPICS), t.id)
     situationRef.current = pickSituation()
+    setNowTopic(rotationRef.current[0])
     segmentIndexRef.current = 0
     setNowTopic(rotationRef.current[0])
     if (was) startLoop()

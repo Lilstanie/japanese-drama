@@ -185,6 +185,24 @@ describe("variation between sessions", () => {
     assert.deepEqual(xs, copy)
   })
 
+  test("the default rotation is deterministic, for server rendering", () => {
+    // Regression: calling shuffle() during render ran Math.random() on the
+    // server and the client, which disagreed about the first topic and broke
+    // hydration. Randomisation belongs to a user action, not to render.
+    const runs = Array.from({ length: 10 }, () =>
+      buildRotation(PODCAST_TOPICS)[0]!.id
+    )
+    assert.equal(new Set(runs).size, 1, "buildRotation is not deterministic")
+  })
+
+  test("shuffling still varies the opening topic between sessions", () => {
+    // The hydration fix must not have quietly removed the variety it protects.
+    const firsts = new Set(
+      Array.from({ length: 40 }, () => buildRotation(shuffle(PODCAST_TOPICS))[0]!.id)
+    )
+    assert.ok(firsts.size > 5, `only ${firsts.size} distinct opening topics in 40 starts`)
+  })
+
   test("a shuffled rotation still satisfies the category rule", () => {
     // Shuffling must not undo the thing rotation exists to do.
     for (let i = 0; i < 20; i++) {
