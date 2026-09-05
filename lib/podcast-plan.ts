@@ -171,6 +171,59 @@ export function planSegment(
   }
 }
 
+/**
+ * A concrete situation for a topic, injected into the prompt.
+ *
+ * Sampling parameters vary *wording*; they cannot vary the frame. Measured at
+ * the default temperature, five openings on the same topic all came out as
+ * "time + place + what I ate + んだけど" — different nouns, identical shape,
+ * because the instruction fixed the shape. Changing the inputs is what changes
+ * the conversation.
+ */
+export type Situation = { season: string; setting: string; mood: string }
+
+const SEASONS = [
+  "春、桜が散り始めた頃", "梅雨で毎日雨", "真夏、猛暑日が続いている",
+  "秋、紅葉がきれいな時期", "冬、初雪が降った日", "年末、街が慌ただしい",
+]
+
+const SETTINGS = [
+  "電話で話している", "カフェで向かい合っている", "駅まで歩きながら",
+  "居酒屋のカウンターで", "オンライン通話で、少し音が悪い",
+  "コンビニの前で立ち話している", "電車で隣に座っている",
+]
+
+const MOODS = [
+  "二人とも機嫌がいい", "Kenjiは少し疲れていて口数が少なめ",
+  "Weiが何かに驚いている", "二人とも少し空腹",
+  "Kenjiが最近あった出来事にまだ興奮している",
+  "Weiがちょっと落ち込んでいる", "二人とも寝不足",
+]
+
+const pick = <T,>(xs: T[], rnd: () => number): T => xs[Math.floor(rnd() * xs.length)]!
+
+/** A random situation. Pass `rnd` to make it deterministic in tests. */
+export function pickSituation(rnd: () => number = Math.random): Situation {
+  return {
+    season: pick(SEASONS, rnd),
+    setting: pick(SETTINGS, rnd),
+    mood: pick(MOODS, rnd),
+  }
+}
+
+/**
+ * Fisher-Yates. Used to vary topic order between sessions — a fixed rotation
+ * means the same drive always opens the same way.
+ */
+export function shuffle<T>(xs: T[], rnd: () => number = Math.random): T[] {
+  const out = [...xs]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1))
+    ;[out[i], out[j]] = [out[j]!, out[i]!]
+  }
+  return out
+}
+
 /** Segment index at which `rotation[i]` starts — used to skip a topic. */
 export function segmentIndexForTopic(topicPosition: number): number {
   return topicPosition * SEGMENTS_PER_TOPIC

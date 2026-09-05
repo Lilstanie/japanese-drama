@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import Link from "next/link"
 import KatakanaToggle from "@/components/KatakanaToggle"
 import { PODCAST_TOPICS, TOPIC_CATEGORY_LABEL } from "@/lib/podcast-topics"
-import { buildRotation, planSegment, SEGMENTS_PER_TOPIC, type PlannedSegment } from "@/lib/podcast-plan"
+import { buildRotation, planSegment, pickSituation, shuffle, SEGMENTS_PER_TOPIC, type PlannedSegment, type Situation } from "@/lib/podcast-plan"
 import {
   setMediaSessionHandlers,
   clearMediaSession,
@@ -43,7 +43,8 @@ async function fetchTurn(
   speaker: "A" | "B",
   history: HistoryEntry[],
   kind: "dialogue" | "explain" = "dialogue",
-  move?: string
+  move?: string,
+  situation?: Situation
 ): Promise<string> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TURN_TIMEOUT_MS)
@@ -52,7 +53,7 @@ async function fetchTurn(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        topic: topic.label, difficulty, seed: topic.seed, speaker, history, kind, move,
+        topic: topic.label, difficulty, seed: topic.seed, speaker, history, kind, move, situation,
       }),
       signal: controller.signal,
     })
@@ -77,10 +78,11 @@ async function fetchWithRetry(
   speaker: "A" | "B",
   history: HistoryEntry[],
   kind: "dialogue" | "explain" = "dialogue",
-  move?: string
+  move?: string,
+  situation?: Situation
 ): Promise<string | null> {
-  try { return await fetchTurn(topic, difficulty, speaker, history, kind, move) } catch {}
-  try { return await fetchTurn(topic, difficulty, speaker, history, kind, move) } catch {}
+  try { return await fetchTurn(topic, difficulty, speaker, history, kind, move, situation) } catch {}
+  try { return await fetchTurn(topic, difficulty, speaker, history, kind, move, situation) } catch {}
   return null
 }
 
@@ -130,8 +132,11 @@ export default function PodcastPlayer() {
   const skipGapRef = useRef<(() => void) | null>(null)
   // Rotation order and playhead. The loop reads these, so they are refs; the
   // rotation is rebuilt whenever the starting topic changes.
-  const rotationRef = useRef(buildRotation(PODCAST_TOPICS))
+  const rotationRef = useRef(buildRotation(shuffle(PODCAST_TOPICS)))
   const segmentIndexRef = useRef(0)
+  // One situation per topic — season, setting and mood — so two runs of the
+  // same topic differ in more than word choice.
+  const situationRef = useRef<Situation>(pickSituation())
   const [nowTopic, setNowTopic] = useState(rotationRef.current[0])
   // Media Session handlers are registered once, before these functions exist;
   // refs let that single registration reach the current implementations.
@@ -221,10 +226,14 @@ export default function PodcastPlayer() {
         // First turn or after a reset — nothing is warm yet, so this one waits.
         setIsGenerating(true)
         line = await fetchWithRetry(
-          plan.topic, difficultyRef.current, speaker, historyRef.current, plan.kind, plan.move
+          plan.topic, difficultyRef.current, speaker, historyRef.current,
+          plan.kind, plan.move, situationRef.current
         )
         setIsGenerating(false)
       }
+
+      // A new topic gets a new scene.
+      if (plan.startsTopic) situationRef.current = pickSituation()
 
       // Announce the topic to the car before its first line plays.
       if (plan.startsTopic) {
@@ -258,12 +267,15 @@ export default function PodcastPlayer() {
       const nextSpeaker = nextPlan.speaker
       const snapHistory = historyRef.current
       const snapDiff = difficultyRef.current
+      // A topic change mid-prefetch must not mix the old scene into the new topic.
+      const snapSituation = nextPlan.startsTopic ? pickSituation() : situationRef.current
       const myGen = gen
 
       nextLinePrefetch = gap(GAP_MS).then(async () => {
         if (!isPlayingRef.current || loopGenRef.current !== myGen) return null
         const text = await fetchWithRetry(
-          nextPlan.topic, snapDiff, nextSpeaker, snapHistory, nextPlan.kind, nextPlan.move
+          nextPlan.topic, snapDiff, nextSpeaker, snapHistory,
+          nextPlan.kind, nextPlan.move, snapSituation
         )
         if (!text?.trim()) return null
         if (!isPlayingRef.current || loopGenRef.current !== myGen) return null
@@ -350,7 +362,8 @@ export default function PodcastPlayer() {
     setTopic(t); topicRef.current = t
     // Rebuild the rotation to start here, so the picker chooses the opening
     // topic rather than the only one.
-    rotationRef.current = buildRotation(PODCAST_TOPICS, t.id)
+    rotationRef.current = buildRotation(shuffle(PODCAST_TOPICS), t.id)
+    situationRef.current = pickSituation()
     segmentIndexRef.current = 0
     setNowTopic(rotationRef.current[0])
     if (was) startLoop()

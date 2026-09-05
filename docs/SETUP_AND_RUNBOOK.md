@@ -393,6 +393,37 @@ Note for tuning: an explanation turn must NOT receive the full conversation plus
 "say your next line" — that instruction beats the system prompt and it carries
 on chatting. It gets only the line being explained.
 
+### Randomness: what sampling can and cannot do
+
+| Parameter | Effect | Useful here |
+|-----------|--------|-------------|
+| `temperature` | Flatness of the token distribution | Limited. Already at the default 1.0, and above ~1.2 the Japanese degrades and the `漢字(かんじ)` furigana format breaks — which silently breaks ruby, romaji **and** speech at once |
+| `top_p` / `top_k` | Restrict the candidate set | Tune one *or* temperature, not both |
+| `seed` | Makes output reproducible | The opposite of what is wanted |
+| `frequency_penalty` / `presence_penalty` | Suppress repetition | In use at 0.6 / 0.5 |
+
+**Sampling varies wording, not shape.** Measured at the default temperature,
+five openings on the same topic were all "time + place + what I ate + んだけど" —
+different dishes and districts every time, identical frame — because a single
+`open` instruction named time and place. No temperature setting fixes that.
+
+What does: varying the *input*.
+
+- **Several phrasings per move**, picked per request. `open` can now ask for a
+  scene, a question with no preamble, a stated opinion, or a passing thought.
+- **A situation per topic** — season, setting and mood, e.g. "梅雨で毎日雨 ·
+  コンビニの前で立ち話 · 二人とも少し空腹". Same seed, different scene.
+- **A shuffled rotation each session**, so a drive does not always open the same
+  way. Shuffling runs *before* `buildRotation`, so the no-same-category-twice
+  rule still holds — there is a test for that.
+
+After the change the same five openings came out as a wistful remark, a stated
+preference, a bare question, a scene, and a one-line question — different frames,
+all incorporating the weather.
+
+`pickSituation()` and `shuffle()` accept an injectable random function so the
+behaviour is testable.
+
 ### Car head units (CarPlay / Android Auto)
 
 `lib/media-session.ts` supplies what the car actually renders — it does not draw

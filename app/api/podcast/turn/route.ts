@@ -31,26 +31,105 @@ const SYSTEM_B = (topic: string, difficulty: string, seed: string) =>
  * Per-turn instruction. Without one the model settles into agreeable closure
  * formulas and the conversation loops while every line still reads naturally.
  */
-const MOVE_JA: Record<string, string> = {
-  open: "この話題を、具体的な場面から始めてください。いつ・どこで・何が、を一つ入れること。",
-  ask: "相手にまだ聞いていないことを、具体的に一つ質問してください。",
-  detail: "固有名詞・数字・地名のどれかを必ず一つ入れて、新しい情報を足してください。",
-  contrast: "日本と中国の違いを一つ挙げてください。相手の国のことは決めつけず、聞く形にすること。",
-  anecdote: "自分の体験を短く一つ語ってください。失敗談でも構いません。",
-  disagree: "相手に軽く反論するか、自分は苦手だと正直に言ってください。同意で終わらせないこと。",
-  shift: "同じ話題の中で、まだ話していない別の角度に話を移してください。",
-  close: "この話題に短く区切りをつけてください。ただし次の約束はしないこと。",
+/**
+ * Several phrasings per move, chosen at random.
+ *
+ * One phrasing per move fixes the *shape* of every turn: with a single `open`
+ * instruction naming time and place, five openings on the same topic all came
+ * out as "time + place + what I ate + んだけど". Sampling temperature varies the
+ * nouns; only a different instruction varies the frame.
+ */
+const MOVE_JA: Record<string, string[]> = {
+  open: [
+    "この話題を、具体的な場面から始めてください。いつ・どこで・何が、を一つ入れること。",
+    "いきなり質問から始めてください。挨拶や前置きは無し。",
+    "自分の意見を先に言い切ってから始めてください。理由は後回しでいい。",
+    "最近気づいたことを、独り言のように話し始めてください。",
+  ],
+  ask: [
+    "相手にまだ聞いていないことを、具体的に一つ質問してください。",
+    "相手の言ったことの中で、一番引っかかった部分だけを聞き返してください。",
+    "答えにくい質問を一つしてください。相手が考え込むような。",
+  ],
+  detail: [
+    "固有名詞・数字・地名のどれかを必ず一つ入れて、新しい情報を足してください。",
+    "値段か時間を具体的に言ってください。だいたいではなく数字で。",
+    "あまり知られていない事実を一つ教えてください。",
+  ],
+  contrast: [
+    "日本と中国の違いを一つ挙げてください。相手の国のことは決めつけず、聞く形にすること。",
+    "昔と今で変わったことを一つ挙げてください。",
+    "自分の地元と東京の違いを一つ話してください。",
+  ],
+  anecdote: [
+    "自分の体験を短く一つ語ってください。失敗談でも構いません。",
+    "恥ずかしかった出来事を一つ話してください。",
+    "予想と全然違った経験を一つ話してください。",
+  ],
+  disagree: [
+    "相手に軽く反論するか、自分は苦手だと正直に言ってください。同意で終わらせないこと。",
+    "相手の意見に「でも」で切り返してください。",
+    "実は自分は逆の意見だと打ち明けてください。",
+  ],
+  shift: [
+    "同じ話題の中で、まだ話していない別の角度に話を移してください。",
+    "急に思い出したこととして、関係のありそうな別の話を始めてください。",
+    "話が逸れていることに気づいて、少し戻してください。",
+  ],
+  close: [
+    "この話題に短く区切りをつけてください。ただし次の約束はしないこと。",
+    "自分なりの結論を一言だけ言ってください。",
+    "まだ納得していない様子で、この話題を一旦置いてください。",
+  ],
 }
 
-const MOVE_ZH: Record<string, string> = {
-  open: "从一个具体场景开头，说清楚时间、地点或人物中的一个。",
-  ask: "问对方一个还没问过的、具体的问题。",
-  detail: "补充一条新信息，必须包含一个具体的名字、数字或地名。",
-  contrast: "说一个中国和日本的差别，用请教的语气，不要替对方下结论。",
-  anecdote: "讲一件你自己的具体经历，可以是糗事。",
-  disagree: "对对方的说法提出一点不同意见，或者坦白说自己不喜欢。不要一味附和。",
-  shift: "在同一个话题里，转到一个还没聊过的角度。",
-  close: "给这个话题做一个简短的收尾，但不要约下次。",
+const MOVE_ZH: Record<string, string[]> = {
+  open: [
+    "从一个具体场景开头，说清楚时间、地点或人物中的一个。",
+    "直接抛一个问题开场，不要寒暄。",
+    "先把自己的观点说死，理由放后面。",
+  ],
+  ask: [
+    "问对方一个还没问过的、具体的问题。",
+    "只揪住对方刚说的一个细节追问。",
+    "问一个不太好回答的问题，让对方想一下。",
+  ],
+  detail: [
+    "补充一条新信息，必须包含一个具体的名字、数字或地名。",
+    "说一个具体的价格或时间，要数字，不要「大概」。",
+    "讲一个不太为人知的冷知识。",
+  ],
+  contrast: [
+    "说一个中国和日本的差别，用请教的语气，不要替对方下结论。",
+    "说一个你老家和北上广的差别。",
+    "说一件以前和现在不一样的事。",
+  ],
+  anecdote: [
+    "讲一件你自己的具体经历，可以是糗事。",
+    "讲一件让你很尴尬的事。",
+    "讲一次跟你预想完全相反的经历。",
+  ],
+  disagree: [
+    "对对方的说法提出一点不同意见，或者坦白说自己不喜欢。不要一味附和。",
+    "用「可是」直接顶回去。",
+    "承认你其实是相反的看法。",
+  ],
+  shift: [
+    "在同一个话题里，转到一个还没聊过的角度。",
+    "像突然想起来一样，扯到一件相关的别的事。",
+    "发现话题跑偏了，往回拉一点。",
+  ],
+  close: [
+    "给这个话题做一个简短的收尾，但不要约下次。",
+    "只说一句你自己的结论。",
+    "带着还没想通的语气，先把这个话题放一放。",
+  ],
+}
+
+/** Pick one phrasing. Random per request, so the same move varies run to run. */
+const pickMove = (table: Record<string, string[]>, move: string): string => {
+  const options = table[move] ?? table.detail!
+  return options[Math.floor(Math.random() * options.length)]!
 }
 
 /**
@@ -77,7 +156,7 @@ const SYSTEM_EXPLAIN = (difficulty: string) =>
 学习者水平：${difficulty}`
 
 export async function POST(request: Request) {
-  const { topic, difficulty, seed, speaker, history, kind, move } = (await request.json()) as {
+  const { topic, difficulty, seed, speaker, history, kind, move, situation } = (await request.json()) as {
     topic: string
     difficulty: string
     seed: string
@@ -85,18 +164,28 @@ export async function POST(request: Request) {
     history: { speaker: "A" | "B"; content: string }[]
     kind?: "dialogue" | "explain"
     move?: string
+    situation?: { season: string; setting: string; mood: string }
   }
 
   // Built per request, not at module scope: Next evaluates route modules while
   // collecting page data at build time, where no key exists.
   const client = createAIClient()
 
+  // The situation is what makes two runs of the same topic actually differ:
+  // same seed, different season, place and mood.
+  const situationJa = situation
+    ? `\n今の状況: ${situation.season}。${situation.setting}。${situation.mood}。`
+    : ""
+  const situationZh = situation
+    ? `\n当前情境：${situation.season}。${situation.setting}。${situation.mood}。`
+    : ""
+
   const system =
     kind === "explain"
       ? SYSTEM_EXPLAIN(difficulty)
       : speaker === "A"
-        ? `${SYSTEM_A(topic, difficulty, seed)}\n\n今回の役割: ${MOVE_JA[move ?? "detail"] ?? MOVE_JA.detail}\n\n${NO_LOOP_JA}`
-        : `${SYSTEM_B(topic, difficulty, seed)}\n\n本轮任务：${MOVE_ZH[move ?? "detail"] ?? MOVE_ZH.detail}\n\n${NO_LOOP_ZH}`
+        ? `${SYSTEM_A(topic, difficulty, seed)}${situationJa}\n\n今回の役割: ${pickMove(MOVE_JA, move ?? "detail")}\n\n${NO_LOOP_JA}`
+        : `${SYSTEM_B(topic, difficulty, seed)}${situationZh}\n\n本轮任务：${pickMove(MOVE_ZH, move ?? "detail")}\n\n${NO_LOOP_ZH}`
 
   const recentHistory = history.slice(-8)
   const formatted = recentHistory

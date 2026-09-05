@@ -3,6 +3,8 @@ import assert from "node:assert/strict"
 import {
   buildRotation,
   planSegment,
+  pickSituation,
+  shuffle,
   SEGMENTS_PER_TOPIC,
   EXPLAIN_EVERY,
 } from "@/lib/podcast-plan"
@@ -141,6 +143,55 @@ describe("conversation moves", () => {
     const asks = Array.from({ length: SEGMENTS_PER_TOPIC }, (_, i) => plan(i).move)
       .filter((m) => m === "ask").length
     assert.ok(asks >= 2, `only ${asks} questions per topic`)
+  })
+})
+
+describe("variation between sessions", () => {
+  // Sampling temperature varies word choice; it cannot vary the frame. These
+  // cover the inputs that do.
+
+  test("a situation always has all three parts", () => {
+    for (let i = 0; i < 50; i++) {
+      const s = pickSituation()
+      assert.ok(s.season && s.setting && s.mood, "incomplete situation")
+    }
+  })
+
+  test("situations actually differ across runs", () => {
+    const seen = new Set(
+      Array.from({ length: 60 }, () => JSON.stringify(pickSituation()))
+    )
+    assert.ok(seen.size > 20, `only ${seen.size} distinct situations in 60 draws`)
+  })
+
+  test("a seeded random makes situations reproducible", () => {
+    // Deterministic when it needs to be — otherwise this suite could not
+    // assert anything about it.
+    const seeded = () => { let n = 42; return () => (n = (n * 1103515245 + 12345) % 2147483648) / 2147483648 }
+    assert.deepEqual(pickSituation(seeded()), pickSituation(seeded()))
+  })
+
+  test("shuffle keeps every item exactly once", () => {
+    const xs = [1, 2, 3, 4, 5, 6, 7, 8]
+    const out = shuffle(xs)
+    assert.equal(out.length, xs.length)
+    assert.deepEqual([...out].sort((a, b) => a - b), xs)
+  })
+
+  test("shuffle does not mutate its input", () => {
+    const xs = [1, 2, 3, 4, 5]
+    const copy = [...xs]
+    shuffle(xs)
+    assert.deepEqual(xs, copy)
+  })
+
+  test("a shuffled rotation still satisfies the category rule", () => {
+    // Shuffling must not undo the thing rotation exists to do.
+    for (let i = 0; i < 20; i++) {
+      const r = buildRotation(shuffle(PODCAST_TOPICS))
+      const clashes = r.slice(1).filter((t, j) => t.category === r[j]!.category)
+      assert.equal(clashes.length, 0, `run ${i}: ${clashes.length} same-category pairs`)
+    }
   })
 })
 
