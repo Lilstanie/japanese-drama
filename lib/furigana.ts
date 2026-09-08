@@ -1,3 +1,5 @@
+import { toHiragana } from "wanakana"
+
 /**
  * Furigana markup, normalised to half-width parentheses.
  *
@@ -40,8 +42,12 @@ function splitOkurigana(
 export function parseFuriganaSegments(input: string): FuriganaSegment[] {
   const text = normalizeFurigana(input)
   const segments: FuriganaSegment[] = []
-  // Base must start with a kanji so preceding hiragana (e.g. ちょっと in ちょっと難(むずか)) are not captured
-  const re = /([一-龯々][一-龯々ぁ-ん]*)\(([ぁ-ん]+)\)/g
+  // Base must start with a kanji so preceding hiragana (e.g. ちょっと in
+  // ちょっと難(むずか)) are not captured. Two tolerances catch readings the model
+  // annotated in a slightly-off format, which otherwise render as bare kanji:
+  //   - \s* : a stray space between the word and its reading — 私 (わたし)
+  //   - the reading may be katakana — 私(ワタシ) — converted to hiragana below
+  const re = /([一-龯々][一-龯々ぁ-ん]*)\s*\(([ぁ-んァ-ヺー]+)\)/g
   let lastIndex = 0
   let match: RegExpExecArray | null
 
@@ -49,7 +55,12 @@ export function parseFuriganaSegments(input: string): FuriganaSegment[] {
     if (match.index > lastIndex) {
       segments.push({ type: "text", text: text.slice(lastIndex, match.index) })
     }
-    const split = splitOkurigana(match[1], match[2])
+    // Furigana is conventionally hiragana; fold a katakana reading down to it.
+    // Only touch readings that actually contain katakana, so a plain hiragana
+    // reading is passed through byte-for-byte.
+    const rawReading = match[2]
+    const reading = /[ァ-ヺ]/.test(rawReading) ? toHiragana(rawReading) : rawReading
+    const split = splitOkurigana(match[1], reading)
     segments.push({ type: "ruby", ...split })
     lastIndex = match.index + match[0].length
   }

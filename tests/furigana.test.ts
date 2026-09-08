@@ -33,6 +33,38 @@ describe("furigana parsing", () => {
   })
 })
 
+describe("tolerates near-miss reading formats the model produces", () => {
+  test("a stray space between the word and its reading still annotates", () => {
+    const [r] = rubies("私 (わたし)")
+    assert.equal(r?.type === "ruby" && r.kanji, "私")
+    assert.equal(r?.type === "ruby" && r.reading, "わたし")
+  })
+
+  test("a katakana reading is folded down to hiragana", () => {
+    const [r] = rubies("私(ワタシ)")
+    assert.equal(r?.type === "ruby" && r.reading, "わたし")
+  })
+
+  test("a plain hiragana reading is passed through unchanged", () => {
+    // The conversion must only touch katakana, never rewrite normal readings.
+    const [r] = rubies("重心(じゅうしん)")
+    assert.equal(r?.type === "ruby" && r.reading, "じゅうしん")
+  })
+
+  test("still refuses non-kana readings so real parentheticals survive", () => {
+    assert.equal(rubies("私(watashi)").length, 0)
+    assert.equal(rubies("会議(重要)").length, 0)
+  })
+
+  test("okurigana still splits with a spaced katakana reading", () => {
+    // 見て (ミテ): reading normalises to みて, and て peels off as okurigana.
+    const [r] = rubies("見て (ミテ)")
+    assert.equal(r?.type === "ruby" && r.kanji, "見")
+    assert.equal(r?.type === "ruby" && r.reading, "み")
+    assert.equal(r?.type === "ruby" && r.okurigana, "て")
+  })
+})
+
 describe("full-width parentheses", () => {
   // Regression: the models write furigana in either width — the podcast's own
   // system prompt is Japanese, where （） is conventional — and matching only
