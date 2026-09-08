@@ -339,7 +339,27 @@ function readKanjiRun(run: string): string | null {
 }
 
 /**
- * Break a plain-text segment into tokens.
+ * One aligned word of output.
+ *
+ * A plain romaji string is enough to *read* a line, but the UI needs to link
+ * each romaji word back to the Japanese it came from — to highlight the pair on
+ * hover and to pronounce just that word on click. So every word is emitted as a
+ * triple:
+ *
+ *   - `romaji`  what the learner reads (「tabemono」, 「wa」, 「desu.」)
+ *   - `ja`      the Japanese surface *with* its furigana markup (「食(た)べ物(もの)」),
+ *               so re-rendering one token still shows the same ruby as the whole
+ *               line did
+ *   - `speak`   the kana to feed TTS (「たべもの」) — the reading, not the kanji,
+ *               so a lone kanji word is never mispronounced
+ *
+ * `speak` is empty for a token that is only punctuation, which the UI treats as
+ * not clickable.
+ */
+export type RomajiToken = { romaji: string; ja: string; speak: string }
+
+/**
+ * Break a plain-text segment into aligned tokens.
  *
  * Returns the trailing honorific prefix separately when the segment ends in
  * one: お in 「何をお探し」 belongs to the kanji word in the *next* segment.
@@ -347,10 +367,14 @@ function readKanjiRun(run: string): string | null {
 function tokenizePlain(
   text: string,
   followsContent: boolean
-): { tokens: string[]; trailingPrefix: string } {
-  const tokens: string[] = []
+): { tokens: RomajiToken[]; trailingPrefix: string } {
+  const tokens: RomajiToken[] = []
   let trailingPrefix = ""
   let i = 0
+
+  const push = (romaji: string, ja: string, speak: string) => {
+    if (romaji) tokens.push({ romaji, ja, speak })
+  }
 
   while (i < text.length) {
     const c = text[i]
@@ -358,8 +382,13 @@ function tokenizePlain(
     if (PUNCTUATION[c] !== undefined) {
       const p = PUNCTUATION[c]
       // Attach closing punctuation to the previous token so it reads naturally.
-      if (/[.,!?]/.test(p) && tokens.length) tokens[tokens.length - 1] += p
-      else if (p.trim()) tokens.push(p)
+      if (/[.,!?]/.test(p) && tokens.length) {
+        const last = tokens[tokens.length - 1]
+        last.romaji += p
+        last.ja += c
+      } else if (p.trim()) {
+        tokens.push({ romaji: p, ja: c, speak: "" })
+      }
       i++
       continue
     }
@@ -374,7 +403,10 @@ function tokenizePlain(
       kanaTokens.forEach((t, idx) => {
         const isLast = idx === kanaTokens.length - 1 && j === text.length
         if (isLast && t.prefix) { trailingPrefix = t.kana; return }
-        for (const r of tokenToRomaji(t.kana, t.particle)) if (r) tokens.push(r)
+        // A word may romanise into more than one part (曲がって + ください);
+        // keep them one clickable unit, joined the way the flat string joins.
+        const romaji = tokenToRomaji(t.kana, t.particle).filter(Boolean).join(" ")
+        push(romaji, t.kana, t.kana)
       })
       i = j
       continue
@@ -385,8 +417,9 @@ function tokenizePlain(
       while (j < text.length && isKanji(text[j])) j++
       const run = text.slice(i, j)
       const reading = readKanjiRun(run)
-      // Unknown kanji stay as kanji — visibly unconverted beats silently wrong.
-      tokens.push(reading ? kanaToRomaji(reading) : run)
+      // Unknown kanji stay as kanji — visibly unconverted beats silently wrong —
+      // and are spoken as the kanji, the best TTS can do without a reading.
+      push(reading ? kanaToRomaji(reading) : run, run, reading ?? run)
       i = j
       continue
     }
@@ -400,7 +433,7 @@ function tokenizePlain(
       PUNCTUATION[text[j]] === undefined
     ) j++
     const rest = text.slice(i, j).trim()
-    if (rest) tokens.push(rest)
+    if (rest) push(rest, rest, rest)
     i = j === i ? i + 1 : j
   }
 
@@ -408,35 +441,47 @@ function tokenizePlain(
 }
 
 /**
- * Transliterate Japanese text to spaced romaji, using the furigana already
- * present in the text to read its kanji.
+ * Transliterate Japanese text to aligned romaji tokens, using the furigana
+ * already present in the text to read its kanji.
+ *
+ * Each token carries the Japanese it came from and the kana to speak it (see
+ * {@link RomajiToken}), which is what lets the UI highlight a romaji/word pair
+ * on hover and pronounce a single word on click. {@link convertToRomaji}
+ * flattens these back into the plain spaced string the rest of the app uses.
  */
-export function convertToRomaji(text: string): string {
-  const tokens: string[] = []
+export function convertToRomajiTokens(text: string): RomajiToken[] {
+  const tokens: RomajiToken[] = []
   const segments = parseJapaneseText(text)
 
-  // Holds kana that must join the *next* word: an honorific prefix, or the
-  // first half of a word the model annotated in two pieces (食(た)べ物(もの)).
-  let carry = ""
+  // Holds a partial word that must join the *next* one: an honorific prefix, or
+  // the first half of a word the model annotated in two pieces (食(た)べ物(もの)).
+  // Both the display markup and the kana to speak are carried.
+  let carry: { ja: string; speak: string } | null = null
   let prevWasContent = false
 
-  const emit = (word: string, particle = false) => {
-    for (const r of tokenToRomaji(word, particle)) if (r) tokens.push(r)
+  const emit = (ja: string, speak: string, particle = false) => {
+    const romaji = tokenToRomaji(speak, particle).filter(Boolean).join(" ")
+    if (romaji || ja) tokens.push({ romaji, ja, speak })
   }
 
   for (let s = 0; s < segments.length; s++) {
     const seg = segments[s]
 
     if (seg.type === "ruby") {
-      let word = carry + seg.reading + seg.okurigana
-      carry = ""
+      // Reconstruct furigana markup (kanji + (reading) + okurigana) so a single
+      // token re-renders the same ruby, while speaking the kana reading.
+      let ja: string = (carry?.ja ?? "") + seg.kanji + "(" + seg.reading + ")" + seg.okurigana
+      let speak: string = (carry?.speak ?? "") + seg.reading + seg.okurigana
+      carry = null
 
       const next = segments[s + 1]
       if (!seg.okurigana && next?.type === "text") {
         const run = next.text.match(/^[ぁ-ん]+/)?.[0] ?? ""
         const take = attachableOkurigana(run, seg.reading)
         if (take > 0) {
-          word += run.slice(0, take)
+          const absorbed = run.slice(0, take)
+          ja += absorbed
+          speak += absorbed
           segments[s + 1] = { type: "text", text: next.text.slice(take) }
         }
       }
@@ -448,9 +493,9 @@ export function convertToRomaji(text: string): string {
         after?.type === "ruby" ||
         (after?.type === "text" && after.text === "" && segments[s + 2]?.type === "ruby")
       if (joinsNextRuby) {
-        carry = word
+        carry = { ja, speak }
       } else {
-        emit(word)
+        emit(ja, speak)
       }
 
       prevWasContent = true
@@ -458,8 +503,8 @@ export function convertToRomaji(text: string): string {
     }
 
     if (seg.type === "katakana") {
-      emit(carry + seg.term)
-      carry = ""
+      emit((carry?.ja ?? "") + seg.term, (carry?.speak ?? "") + seg.term)
+      carry = null
       prevWasContent = true
       continue
     }
@@ -467,20 +512,30 @@ export function convertToRomaji(text: string): string {
     if (!seg.text) continue
 
     const { tokens: plain, trailingPrefix } = tokenizePlain(seg.text, prevWasContent)
-    if (carry && plain.length === 0 && !trailingPrefix) {
-      // Nothing here to attach to; do not lose the carried kana.
-      emit(carry)
-      carry = ""
-    } else if (carry) {
-      emit(carry)
-      carry = ""
+    // Nothing here can absorb the carried kana, so emit it on its own.
+    if (carry) {
+      emit(carry.ja, carry.speak)
+      carry = null
     }
     tokens.push(...plain)
-    carry = trailingPrefix
+    carry = trailingPrefix ? { ja: trailingPrefix, speak: trailingPrefix } : null
     prevWasContent = plain.length > 0 && !trailingPrefix
   }
 
-  if (carry) emit(carry)
+  if (carry) emit(carry.ja, carry.speak)
 
-  return tokens.filter(Boolean).join(" ").replace(/\s+([.,!?])/g, "$1").trim()
+  return tokens
+}
+
+/**
+ * Transliterate Japanese text to spaced romaji, using the furigana already
+ * present in the text to read its kanji.
+ */
+export function convertToRomaji(text: string): string {
+  return convertToRomajiTokens(text)
+    .map(t => t.romaji)
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+([.,!?])/g, "$1")
+    .trim()
 }

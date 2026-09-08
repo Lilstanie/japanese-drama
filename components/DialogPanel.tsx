@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
+import { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import type { Message } from "@/lib/types"
-import { convertToRomaji } from "@/lib/romaji"
+import { convertToRomaji, convertToRomajiTokens, type RomajiToken } from "@/lib/romaji"
 import JapaneseText from "@/components/JapaneseText"
 import { speakLine, cancelSpeech, toSpeechText } from "@/lib/tts"
 import { useVoices } from "@/components/VoiceProvider"
@@ -104,12 +104,112 @@ function SpeakButton({
   )
 }
 
+/**
+ * The Japanese line and its romaji, rendered from the SAME aligned tokens so a
+ * word and its transliteration can be linked. Hovering either half highlights
+ * the pair; clicking either half pronounces just that word.
+ *
+ * Both lines come from convertToRomajiTokens, and a token carries the furigana
+ * markup for its word — so each Japanese token re-renders with the exact ruby
+ * the whole line had, while gaining its own hover/click target.
+ */
+function InteractiveRomaji({
+  text, msgId, isUser, speakingWord, onSpeakWord,
+}: {
+  text: string; msgId: string; isUser: boolean
+  speakingWord: string | null
+  onSpeakWord: (msgId: string, index: number, token: RomajiToken, isUser: boolean) => void
+}) {
+  const tokens = useMemo(() => convertToRomajiTokens(text), [text])
+  const [hovered, setHovered] = useState<number | null>(null)
+
+  // User bubbles are warm-on-light, character bubbles dark-on-amber.
+  const romajiColor = isUser ? "#f0c080" : "#a07850"
+  const borderColor = isUser ? "#9c6b24" : "#3d2010"
+  const hoverBg = isUser ? "rgba(26,12,2,0.30)" : "rgba(245,158,11,0.16)"
+  const speakBg = "rgba(245,158,11,0.34)"
+
+  const shared = (i: number, t: RomajiToken) => {
+    const clickable = !!t.speak
+    const isSpeaking = speakingWord === `${msgId}#${i}`
+    const active = hovered === i || isSpeaking
+    return {
+      clickable,
+      isSpeaking,
+      background: active ? (isSpeaking ? speakBg : hoverBg) : "transparent",
+      onMouseEnter: () => { if (clickable) setHovered(i) },
+      onMouseLeave: () => setHovered(h => (h === i ? null : h)),
+      onClick: clickable ? () => onSpeakWord(msgId, i, t, isUser) : undefined,
+    }
+  }
+
+  return (
+    <>
+      <div className="ruby-text">
+        {tokens.map((t, i) => {
+          const s = shared(i, t)
+          return (
+            <span
+              key={i}
+              onMouseEnter={s.onMouseEnter}
+              onMouseLeave={s.onMouseLeave}
+              onClick={s.onClick}
+              style={{
+                cursor: s.clickable ? "pointer" : "default",
+                background: s.background,
+                borderRadius: "5px",
+                padding: "1px 2px",
+                margin: "0 -1px",
+                transition: "background 0.12s ease",
+              }}
+            >
+              <JapaneseText text={t.ja} />
+            </span>
+          )
+        })}
+      </div>
+      <div
+        className="mt-1.5 text-xs italic leading-snug border-t pt-1"
+        style={{ color: romajiColor, borderColor }}
+      >
+        {tokens.map((t, i) => {
+          const s = shared(i, t)
+          return (
+            <span key={i}>
+              {i > 0 ? " " : ""}
+              <span
+                onMouseEnter={s.onMouseEnter}
+                onMouseLeave={s.onMouseLeave}
+                onClick={s.onClick}
+                title={s.clickable ? `🔊 点击朗读「${t.speak}」` : undefined}
+                style={{
+                  cursor: s.clickable ? "pointer" : "default",
+                  background: s.background,
+                  color: s.isSpeaking ? "#f59e0b" : undefined,
+                  borderRadius: "5px",
+                  padding: "0.5px 3px",
+                  transition: "background 0.12s ease, color 0.12s ease",
+                }}
+              >
+                {t.romaji}
+              </span>
+            </span>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
 function Bubble({
   msg, characterName, showRomaji, playingId, onPlay, onStop,
+  speakingWord, onSpeakWord,
 }: {
   msg: Message; characterName: string; showRomaji: boolean
   playingId: string | null
   onPlay: (id: string, text: string) => void; onStop: () => void
+  speakingWord: string | null
+  onSpeakWord: (msgId: string, index: number, token: RomajiToken, isUser: boolean) => void
 }) {
   const isUser = msg.role === "user"
   return (
@@ -126,12 +226,16 @@ function Bubble({
             {characterName}
           </div>
         )}
-        <div className="ruby-text"><JapaneseText text={msg.content} /></div>
-        {showRomaji && (
-          <div className="mt-1.5 text-xs italic leading-snug border-t pt-1"
-            style={{ color: isUser ? "#f0c080" : "#a07850", borderColor: isUser ? "#9c6b24" : "#3d2010" }}>
-            {convertToRomaji(msg.content)}
-          </div>
+        {showRomaji ? (
+          <InteractiveRomaji
+            text={msg.content}
+            msgId={msg.id}
+            isUser={isUser}
+            speakingWord={speakingWord}
+            onSpeakWord={onSpeakWord}
+          />
+        ) : (
+          <div className="ruby-text"><JapaneseText text={msg.content} /></div>
         )}
         <SpeakButton id={msg.id} text={msg.content} playingId={playingId} onPlay={onPlay} onStop={onStop} />
       </div>
@@ -147,6 +251,10 @@ export default function DialogPanel({
 }) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [playingId, setPlayingId] = useState<string | null>(null)
+  // A single word being pronounced from the romaji line, keyed `${msgId}#${i}`.
+  // Separate from playingId so a word click and a whole-line play never both
+  // show as active at once.
+  const [speakingWord, setSpeakingWord] = useState<string | null>(null)
   const [jaVoices, setJaVoices] = useState<SpeechSynthesisVoice[]>([])
   const [charVoice, setCharVoice] = useState("")
   const [userVoice, setUserVoice] = useState("")
@@ -207,6 +315,7 @@ export default function DialogPanel({
   const handlePlay = useCallback(async (id: string, text: string) => {
     const msg = messages.find(m => m.id === id)
     const isUser = msg?.role === "user"
+    setSpeakingWord(null)
     setPlayingId(id)
 
     if (useAIVoice) {
@@ -223,10 +332,38 @@ export default function DialogPanel({
     speak(text, isUser ? userVoice : charVoice, () => setPlayingId(null))
   }, [messages, charVoice, userVoice, useAIVoice, voiceFor])
 
+  // Pronounce a single word clicked in the romaji line. Reuses the exact TTS
+  // path a whole line uses, but speaks the word's kana reading (token.speak) so
+  // a lone kanji is never mispronounced.
+  const handleSpeakWord = useCallback(async (
+    msgId: string, index: number, token: RomajiToken, isUser: boolean
+  ) => {
+    // Never leave a half-finished line or another word playing underneath.
+    cancelSpeech()
+    window.speechSynthesis?.cancel()
+    setPlayingId(null)
+
+    const key = `${msgId}#${index}`
+    setSpeakingWord(key)
+    const clear = () => setSpeakingWord(cur => (cur === key ? null : cur))
+
+    if (useAIVoice) {
+      await speakLine(
+        token.speak, "A", 1, 1, null,
+        voiceFor(isUser ? "narrator" : "character")
+      )
+      clear()
+      return
+    }
+
+    speak(token.speak, isUser ? userVoice : charVoice, clear)
+  }, [charVoice, userVoice, useAIVoice, voiceFor])
+
   const handleStop = useCallback(() => {
     cancelSpeech()
     window.speechSynthesis?.cancel()
     setPlayingId(null)
+    setSpeakingWord(null)
   }, [])
 
   return (
@@ -306,7 +443,8 @@ export default function DialogPanel({
         {messages.map(msg => (
           <Bubble key={msg.id} msg={msg} characterName={characterName}
             showRomaji={showRomaji} playingId={playingId}
-            onPlay={handlePlay} onStop={handleStop} />
+            onPlay={handlePlay} onStop={handleStop}
+            speakingWord={speakingWord} onSpeakWord={handleSpeakWord} />
         ))}
 
         {isStreaming && streamingText && (
