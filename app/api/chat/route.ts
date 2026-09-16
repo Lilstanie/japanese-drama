@@ -1,11 +1,14 @@
 import { chatParams, createAIClient, friendlyAIError } from "@/lib/model"
 import { getScenario } from "@/lib/scenarios"
-import { enforceRateLimit, rejectTooLong } from "@/lib/rate-limit"
+import { enforceRateLimit, rejectBots, rejectTooLong } from "@/lib/rate-limit"
 import type { Message } from "@/lib/types"
 
 export async function POST(request: Request) {
   const limited = await enforceRateLimit(request, { name: "chat", limit: 30, windowSec: 60 })
   if (limited) return limited
+
+  const bot = await rejectBots()
+  if (bot) return bot
 
   const client = createAIClient()
   const { scenarioId, messages, userInput } = await request.json() as {

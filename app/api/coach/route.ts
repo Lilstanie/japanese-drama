@@ -1,7 +1,7 @@
 import { chatParams, createAIClient, friendlyAIError } from "@/lib/model"
 import type { Message } from "@/lib/types"
 import { getScenario } from "@/lib/scenarios"
-import { enforceRateLimit, rejectTooLong } from "@/lib/rate-limit"
+import { enforceRateLimit, rejectBots, rejectTooLong } from "@/lib/rate-limit"
 
 function buildCoachPrompt(scenarioContext: string) {
   return `你是一个亲切的中文日语教练，正在陪一个中文母语者学日语。${scenarioContext}
@@ -20,6 +20,9 @@ function buildQuestionPrompt(scenarioContext: string) {
 export async function POST(request: Request) {
   const limited = await enforceRateLimit(request, { name: "coach", limit: 30, windowSec: 60 })
   if (limited) return limited
+
+  const bot = await rejectBots()
+  if (bot) return bot
 
   const client = createAIClient()
 

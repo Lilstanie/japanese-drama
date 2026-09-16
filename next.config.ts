@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
+import { withBotId } from "botid/next/config";
 
 // Pin Turbopack's workspace root to this project. There is a stray
 // package-lock.json in the home directory, so Next's lockfile-based root
@@ -15,4 +16,5 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// withBotId adds the proxy rewrites BotID needs; it leaves the rest untouched.
+export default withBotId(nextConfig);

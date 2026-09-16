@@ -1,6 +1,6 @@
 import { chatParams, createAIClient, friendlyAIError } from "@/lib/model"
 import { formatChunksForPrompt, retrieve } from "@/lib/rag/index"
-import { enforceRateLimit, rejectTooLong } from "@/lib/rate-limit"
+import { enforceRateLimit, rejectBots, rejectTooLong } from "@/lib/rate-limit"
 import type { RetrievedChunk } from "@/lib/rag/types"
 
 const SYSTEM_PROMPT = `你是日语学习知识库助手。你必须优先依据「检索上下文」回答问题。
@@ -13,6 +13,9 @@ const SYSTEM_PROMPT = `你是日语学习知识库助手。你必须优先依据
 export async function POST(request: Request) {
   const limited = await enforceRateLimit(request, { name: "rag", limit: 20, windowSec: 60 })
   if (limited) return limited
+
+  const bot = await rejectBots()
+  if (bot) return bot
 
   if (!process.env.GROQ_API_KEY) {
     return Response.json({ error: "GROQ_API_KEY is not configured" }, { status: 500 })

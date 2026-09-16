@@ -1,5 +1,5 @@
 import { chatParams, createAIClient } from "@/lib/model"
-import { enforceRateLimit, rejectTooLong } from "@/lib/rate-limit"
+import { enforceRateLimit, rejectBots, rejectTooLong } from "@/lib/rate-limit"
 
 const SYSTEM_A = (topic: string, difficulty: string, seed: string) =>
   `あなたはKenjiです。日本人の26歳男性で、友達のWeiと気楽に話しています。
@@ -159,6 +159,9 @@ const SYSTEM_EXPLAIN = (difficulty: string) =>
 export async function POST(request: Request) {
   const limited = await enforceRateLimit(request, { name: "podcast-turn", limit: 60, windowSec: 60 })
   if (limited) return limited
+
+  const bot = await rejectBots()
+  if (bot) return bot
 
   const { topic, difficulty, seed, speaker, history, kind, move, situation } = (await request.json()) as {
     topic: string

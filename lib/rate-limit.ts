@@ -144,6 +144,30 @@ export async function enforceRateLimit(
 }
 
 /**
+ * Reject automated (bot) traffic via Vercel BotID.
+ *
+ * The client half (instrumentation-client.ts) attaches a proof signal to the
+ * protected paths; this reads BotID's verdict on the server and returns a 403
+ * for bots. Pairs with the rate limiter: the limiter caps volume per IP, BotID
+ * catches scripted clients that stay under that cap.
+ *
+ * Fails **open** — a BotID outage must not lock out real users — and is inert
+ * in local dev, enforcing only once deployed on Vercel.
+ */
+export async function rejectBots(): Promise<Response | null> {
+  try {
+    const { checkBotId } = await import("botid/server")
+    const { isBot } = await checkBotId()
+    if (isBot) {
+      return Response.json({ error: "Automated access is not allowed." }, { status: 403 })
+    }
+  } catch (err) {
+    console.warn("[botid] check failed, allowing request:", err)
+  }
+  return null
+}
+
+/**
  * Reject a string that is longer than the model/TTS call should ever need.
  * Returns a 400 `Response` to return from the route, or `null` when the value
  * is within bounds (a missing/optional value passes).
