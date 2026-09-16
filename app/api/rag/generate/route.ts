@@ -1,5 +1,6 @@
 import { chatParams, createAIClient, friendlyAIError } from "@/lib/model"
 import { formatChunksForPrompt, retrieve } from "@/lib/rag/index"
+import { enforceRateLimit, rejectTooLong } from "@/lib/rate-limit"
 import type { RetrievedChunk } from "@/lib/rag/types"
 
 const SYSTEM_PROMPT = `你是日语学习知识库助手。你必须优先依据「检索上下文」回答问题。
@@ -10,6 +11,9 @@ const SYSTEM_PROMPT = `你是日语学习知识库助手。你必须优先依据
 4. 不要编造具体的课程政策或本 App 未提及的功能。`
 
 export async function POST(request: Request) {
+  const limited = await enforceRateLimit(request, { name: "rag", limit: 20, windowSec: 60 })
+  if (limited) return limited
+
   if (!process.env.GROQ_API_KEY) {
     return Response.json({ error: "GROQ_API_KEY is not configured" }, { status: 500 })
   }
@@ -20,14 +24,24 @@ export async function POST(request: Request) {
     chunks?: RetrievedChunk[]
   }
 
+  const tooLong = rejectTooLong(query, 1000, "query")
+  if (tooLong) return tooLong
+
   const q = query?.trim()
   if (!q) {
     return Response.json({ error: "query is required" }, { status: 400 })
   }
 
+  // Client-supplied chunks skip retrieval and go straight into the prompt, so
+  // bound both their count and size before they can inflate the model call.
+  const boundedClientChunks =
+    Array.isArray(clientChunks)
+      ? clientChunks.slice(0, 8).map((c) => ({ ...c, text: (c.text ?? "").slice(0, 4000) }))
+      : []
+
   const chunks =
-    clientChunks && clientChunks.length > 0
-      ? clientChunks
+    boundedClientChunks.length > 0
+      ? boundedClientChunks
       : retrieve(q, Math.min(Math.max(topK ?? 4, 1), 8))
 
   if (chunks.length === 0) {

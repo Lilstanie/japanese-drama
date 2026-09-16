@@ -1,4 +1,5 @@
 import { chatParams, createAIClient } from "@/lib/model"
+import { enforceRateLimit, rejectTooLong } from "@/lib/rate-limit"
 
 const SYSTEM_A = (topic: string, difficulty: string, seed: string) =>
   `あなたはKenjiです。日本人の26歳男性で、友達のWeiと気楽に話しています。
@@ -156,6 +157,9 @@ const SYSTEM_EXPLAIN = (difficulty: string) =>
 学习者水平：${difficulty}`
 
 export async function POST(request: Request) {
+  const limited = await enforceRateLimit(request, { name: "podcast-turn", limit: 60, windowSec: 60 })
+  if (limited) return limited
+
   const { topic, difficulty, seed, speaker, history, kind, move, situation } = (await request.json()) as {
     topic: string
     difficulty: string
@@ -166,6 +170,12 @@ export async function POST(request: Request) {
     move?: string
     situation?: { season: string; setting: string; mood: string }
   }
+
+  const tooLong =
+    rejectTooLong(topic, 500, "topic") ??
+    rejectTooLong(seed, 1000, "seed") ??
+    rejectTooLong(move, 200, "move")
+  if (tooLong) return tooLong
 
   // Built per request, not at module scope: Next evaluates route modules while
   // collecting page data at build time, where no key exists.
@@ -187,15 +197,16 @@ export async function POST(request: Request) {
         ? `${SYSTEM_A(topic, difficulty, seed)}${situationJa}\n\n今回の役割: ${pickMove(MOVE_JA, move ?? "detail")}\n\n${NO_LOOP_JA}`
         : `${SYSTEM_B(topic, difficulty, seed)}${situationZh}\n\n本轮任务：${pickMove(MOVE_ZH, move ?? "detail")}\n\n${NO_LOOP_ZH}`
 
-  const recentHistory = history.slice(-8)
+  const safeHistory = Array.isArray(history) ? history : []
+  const recentHistory = safeHistory.slice(-8)
   const formatted = recentHistory
-    .map((h) => `${h.speaker === "A" ? "Kenji" : "Wei"}: ${h.content}`)
+    .map((h) => `${h.speaker === "A" ? "Kenji" : "Wei"}: ${(h.content ?? "").slice(0, 2000)}`)
     .join("\n")
 
   // An explanation needs only the line being explained. Handing it the whole
   // conversation plus "say your next line" made it carry on chatting instead —
   // the concrete task in the user message beat the system prompt.
-  const lastJapanese = [...history].reverse().find((h) => h.speaker === "A")?.content
+  const lastJapanese = [...safeHistory].reverse().find((h) => h.speaker === "A")?.content
 
   const userMessage =
     kind === "explain"

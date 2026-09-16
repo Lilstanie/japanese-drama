@@ -1,6 +1,7 @@
 import { AI_API_KEY, CHAT_MODEL, chatParams, createAIClient } from "@/lib/model"
 import { lookupLoanword, NON_LOANWORDS } from "@/lib/katakana-dict"
 import { isKatakanaTerm } from "@/lib/katakana"
+import { enforceRateLimit } from "@/lib/rate-limit"
 
 /** Katakana the static dictionary misses gets one model lookup, then is cached. */
 const MAX_TERMS_PER_REQUEST = 12
@@ -39,6 +40,9 @@ Rules:
 - No explanations, no markdown — JSON only.`
 
 export async function POST(request: Request) {
+  const limited = await enforceRateLimit(request, { name: "gloss", limit: 60, windowSec: 60 })
+  if (limited) return limited
+
   let body: { terms?: unknown }
   try {
     body = (await request.json()) as { terms?: unknown }

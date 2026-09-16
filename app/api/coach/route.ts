@@ -1,6 +1,7 @@
 import { chatParams, createAIClient, friendlyAIError } from "@/lib/model"
 import type { Message } from "@/lib/types"
 import { getScenario } from "@/lib/scenarios"
+import { enforceRateLimit, rejectTooLong } from "@/lib/rate-limit"
 
 function buildCoachPrompt(scenarioContext: string) {
   return `你是一个亲切的中文日语教练，正在陪一个中文母语者学日语。${scenarioContext}
@@ -17,6 +18,9 @@ function buildQuestionPrompt(scenarioContext: string) {
 }
 
 export async function POST(request: Request) {
+  const limited = await enforceRateLimit(request, { name: "coach", limit: 30, windowSec: 60 })
+  if (limited) return limited
+
   const client = createAIClient()
 
   const { characterLine, dialogMessages, isDirectQuestion, question, scenarioId } =
@@ -27,6 +31,11 @@ export async function POST(request: Request) {
       question?: string
       scenarioId?: string
     }
+
+  const tooLong =
+    rejectTooLong(characterLine, 4000, "characterLine") ??
+    rejectTooLong(question, 2000, "question")
+  if (tooLong) return tooLong
 
   const scenario = scenarioId ? getScenario(scenarioId) : undefined
   const scenarioContext = scenario
@@ -53,9 +62,9 @@ export async function POST(request: Request) {
             if (text) controller.enqueue(encoder.encode(text))
           }
         } else if (characterLine) {
-          const recentContext = dialogMessages
+          const recentContext = (Array.isArray(dialogMessages) ? dialogMessages : [])
             .slice(-5)
-            .map((m) => `${m.role === "user" ? "学习者" : "角色"}：${m.content}`)
+            .map((m) => `${m.role === "user" ? "学习者" : "角色"}：${(m.content ?? "").slice(0, 4000)}`)
             .join("\n")
 
           const userMessage = `对话背景：\n${recentContext}\n\n日本角色刚说：「${characterLine}」\n\n请分析这句话。`

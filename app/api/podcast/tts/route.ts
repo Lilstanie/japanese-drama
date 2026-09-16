@@ -12,6 +12,7 @@
  */
 
 import { resolveVoice, voiceByName } from "@/lib/voices"
+import { enforceRateLimit, rejectTooLong } from "@/lib/rate-limit"
 
 type Speaker = "A" | "B"
 type Lang = "ja" | "zh"
@@ -83,12 +84,18 @@ async function synthCamb(text: string, speaker: Speaker, voiceName?: string) {
 }
 
 export async function POST(request: Request) {
+  const limited = await enforceRateLimit(request, { name: "tts", limit: 60, windowSec: 60 })
+  if (limited) return limited
+
   const { text, speaker, lang, voice } = (await request.json()) as {
     text: string
     speaker: Speaker
     lang?: Lang // detected on client from actual text content
     voice?: string // optional registered voice name, e.g. A-japanese_female_camb
   }
+
+  const tooLong = rejectTooLong(text, 5000, "text")
+  if (tooLong) return tooLong
 
   if (!text?.trim()) return Response.json({ error: "No text" }, { status: 400 })
 

@@ -1,14 +1,21 @@
 import { chatParams, createAIClient, friendlyAIError } from "@/lib/model"
 import { getScenario } from "@/lib/scenarios"
+import { enforceRateLimit, rejectTooLong } from "@/lib/rate-limit"
 import type { Message } from "@/lib/types"
 
 export async function POST(request: Request) {
+  const limited = await enforceRateLimit(request, { name: "chat", limit: 30, windowSec: 60 })
+  if (limited) return limited
+
   const client = createAIClient()
   const { scenarioId, messages, userInput } = await request.json() as {
     scenarioId: string
     messages: Message[]
     userInput: string
   }
+
+  const tooLong = rejectTooLong(userInput, 4000, "userInput")
+  if (tooLong) return tooLong
 
   const scenario = getScenario(scenarioId)
   if (!scenario) {
@@ -33,9 +40,10 @@ Keep responses 1-3 sentences — natural conversation pace.
 The person you're speaking with is a learner, so be patient and speak clearly.
 Current scenario: ${scenario.description}${loadExtraPrompt(scenario.id)}`
 
-  const history = messages.slice(-10).map((m) => ({
+  const history = (Array.isArray(messages) ? messages : []).slice(-10).map((m) => ({
     role: m.role === "user" ? ("user" as const) : ("assistant" as const),
-    content: m.content,
+    // Clamp each prior turn so a crafted client can't stuff the prompt.
+    content: (m.content ?? "").slice(0, 4000),
   }))
 
   history.push({ role: "user" as const, content: userInput })
