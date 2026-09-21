@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
 import KatakanaToggle from "@/components/KatakanaToggle"
+import AppNav from "@/components/AppNav"
 import Image from "next/image"
 import DialogPanel from "@/components/DialogPanel"
 import CoachPanel from "@/components/CoachPanel"
@@ -74,9 +74,9 @@ function fromStoredMessage(message: StoredMessage): Message {
   }
 }
 
-export default function SceneClient({ scenario }: { scenario: Scenario }) {
-  const router = useRouter()
+const TIP_KEY = "jd:v1:tip:scene"
 
+export default function SceneClient({ scenario }: { scenario: Scenario }) {
   const [dialogMessages, setDialogMessages] = useState<Message[]>([
     { id: makeId(), role: "character", content: scenario.opening, timestamp: new Date() },
   ])
@@ -89,7 +89,19 @@ export default function SceneClient({ scenario }: { scenario: Scenario }) {
   const [activeTab, setActiveTab] = useState<ActiveTab>("dialog")
   const [hasNewCoach, setHasNewCoach] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  // A one-time feature tip. Read from storage after mount so SSR markup is
+  // stable (no hydration mismatch), then shown until the learner dismisses it.
+  const [showTip, setShowTip] = useState(false)
   const storageKey = sceneStorageKey(scenario.id)
+
+  useEffect(() => {
+    if (!getFromStorage<boolean>(TIP_KEY)) setShowTip(true)
+  }, [])
+
+  const dismissTip = () => {
+    setShowTip(false)
+    setToStorage(TIP_KEY, true)
+  }
 
   // Restore last conversation for this scenario
   useEffect(() => {
@@ -264,11 +276,7 @@ export default function SceneClient({ scenario }: { scenario: Scenario }) {
       {/* Header */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 border-b shrink-0"
         style={{ borderColor: "#3d2010", background: "#140a02" }}>
-        <button onClick={() => router.push("/")}
-          className="text-sm px-3 py-1 rounded-lg transition-colors shrink-0 whitespace-nowrap"
-          style={{ color: "#7a5c38", border: "1px solid #3d2010" }}>
-          ← 场景
-        </button>
+        <AppNav compact />
         <Image src="/logo.png" alt="logo" width={30} height={30} className="rounded-lg shrink-0" />
         <span className="text-lg">{scenario.emoji}</span>
         <span className="font-bold" style={{ color: "#f59e0b", fontFamily: "serif" }}>{scenario.titleJa}</span>
@@ -303,6 +311,22 @@ export default function SceneClient({ scenario }: { scenario: Scenario }) {
           </span>
         </div>
       </div>
+
+      {/* One-time feature tip */}
+      {showTip && (
+        <div className="flex items-center gap-2 px-4 py-2 shrink-0 text-xs"
+          style={{ background: "#2a1a08", borderBottom: "1px solid #3d2010", color: "#d4a96a" }}>
+          <span>
+            💡 打开右上角 <b style={{ color: "#f59e0b" }}>ローマ字</b> 看每个词的读音，
+            <b style={{ color: "#f59e0b" }}>点任意单词</b> 即可跟读发音。
+          </span>
+          <button onClick={dismissTip}
+            className="ml-auto px-2 py-0.5 rounded shrink-0 whitespace-nowrap"
+            style={{ color: "#a07850", border: "1px solid #3d2010" }}>
+            知道了 ✕
+          </button>
+        </div>
+      )}
 
       {/* Mobile tab bar */}
       <div className="flex md:hidden border-b shrink-0" style={{ borderColor: "#3d2010", background: "#1a0c02" }}>

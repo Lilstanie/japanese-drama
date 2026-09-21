@@ -1,6 +1,6 @@
 "use client"
 
-import Link from "next/link"
+import AppNav from "@/components/AppNav"
 import { useCallback, useEffect, useState } from "react"
 import type { RagIndexStats, RetrievedChunk } from "@/lib/rag/types"
 
@@ -104,13 +104,9 @@ export default function RagDemo() {
         style={{ borderColor: "#1e2a40" }}
       >
         <div>
-          <Link
-            href="/"
-            className="text-sm mb-1 inline-block"
-            style={{ color: "#5a7090" }}
-          >
-            ← 返回首页
-          </Link>
+          <div className="mb-2">
+            <AppNav active="rag" />
+          </div>
           <h1 className="text-xl font-bold" style={{ color: "#60a5fa" }}>
             RAG Demo · 日语知识库问答
           </h1>

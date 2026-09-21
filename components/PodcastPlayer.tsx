@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import Link from "next/link"
+import AppNav from "@/components/AppNav"
 import KatakanaToggle from "@/components/KatakanaToggle"
 import { PODCAST_TOPICS, TOPIC_CATEGORY_LABEL } from "@/lib/podcast-topics"
 import { buildRotation, planSegment, pickSituation, shuffle, SEGMENTS_PER_TOPIC, type Situation } from "@/lib/podcast-plan"
@@ -560,12 +560,11 @@ export default function PodcastPlayer() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
         style={{ borderColor: "#3d2010", background: "#1e0e04" }}>
-        <Link href="/" className="text-sm px-3 py-1.5 rounded-lg border"
-          style={{ color: "#f59e0b", borderColor: "#5c3d1e" }}>← 戻る</Link>
+        <AppNav active="podcast" />
 
         <div className="flex items-center gap-2">
           <span className="text-lg">🎙️</span>
-          <span className="font-bold text-lg" style={{ color: "#f59e0b", fontFamily: "serif" }}>
+          <span className="font-bold text-lg hidden sm:inline" style={{ color: "#f59e0b", fontFamily: "serif" }}>
             物語 Podcast
           </span>
         </div>

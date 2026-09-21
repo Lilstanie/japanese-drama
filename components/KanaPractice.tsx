@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import AppNav from "@/components/AppNav"
 import { HIRAGANA_ROWS, KATAKANA_ROWS, type KanaEntry, type KanaRow } from "@/lib/kana"
 import { getFromStorage, KANA_PROGRESS_STORAGE_KEY, removeFromStorage, setToStorage } from "@/lib/persistence"
 
@@ -323,13 +324,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
         style={{ background: "#0b1220", borderColor: "#1e293b" }}
       >
         <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
-          <Link
-            href={isQuiz ? "/practice" : "/"}
-            className="text-sm px-3 py-1.5 rounded-lg border flex-shrink-0"
-            style={{ color: "#7dd3fc", borderColor: "#334155" }}
-          >
-            {isQuiz ? "← 返回记忆表" : "← 首页"}
-          </Link>
+          <AppNav active="practice" />
 
           <div className="flex-1 min-w-0">
             {isQuiz ? (

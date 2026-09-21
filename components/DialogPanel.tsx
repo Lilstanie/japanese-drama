@@ -468,6 +468,14 @@ export default function DialogPanel({
             speakingWord={speakingWord} onSpeakWord={handleSpeakWord} />
         ))}
 
+        {/* Fill the empty conversation with a gentle nudge until the learner
+            has replied, so a fresh scene never looks like a dead end. */}
+        {!isStreaming && messages.length > 0 && !messages.some(m => m.role === "user") && (
+          <div className="text-center text-xs pt-4 pb-2" style={{ color: "#5c3d1e" }}>
+            👇 轮到你了 —— 用日语回复{characterName}，或点下方的建议句开始
+          </div>
+        )}
+
         {isStreaming && streamingText && (
           <div className="flex justify-start">
             <div className="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed"
