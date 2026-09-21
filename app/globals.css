@@ -4,6 +4,33 @@
   box-sizing: border-box;
 }
 
+/*
+ * Keyboard focus ring. Every button here is custom-styled with its own
+ * background and border, which removes the UA focus outline — leaving a
+ * keyboard user with no idea where they are. This restores a visible ring, but
+ * only for keyboard focus (:focus-visible), so it never shows on mouse clicks.
+ */
+:focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+/*
+ * Honour a reduced-motion preference: drop the decorative animations (card
+ * hover-scale, mic pulse, typing bounce, smooth scrolling) for users who ask
+ * for less movement, without touching the app's logic.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 html,
 body {
   height: 100%;

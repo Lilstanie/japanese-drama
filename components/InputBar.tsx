@@ -177,8 +177,10 @@ export default function InputBar({
         {/* Mic button */}
         {hasSpeech && (
           <button
+            type="button"
             onClick={toggleListening}
             disabled={disabled}
+            aria-label={isListening ? "停止录音" : "语音输入（日语）"}
             title={isListening ? "停止录音" : "语音输入（日语）"}
             className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-base transition-all"
             style={{

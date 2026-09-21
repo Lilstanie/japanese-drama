@@ -35,6 +35,7 @@ export default function AppNav({
             key={it.key}
             href={it.href}
             aria-current={on ? "page" : undefined}
+            aria-label={it.label}
             title={it.label}
             className="text-xs px-2.5 py-1 rounded-lg border shrink-0 whitespace-nowrap transition-all"
             style={

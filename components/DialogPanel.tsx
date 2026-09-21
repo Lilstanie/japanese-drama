@@ -83,7 +83,10 @@ function SpeakButton({
   const isPlaying = playingId === id
   return (
     <button
+      type="button"
       onClick={() => isPlaying ? onStop() : onPlay(id, text)}
+      aria-label={isPlaying ? "停止朗读" : "朗读这句"}
+      title={isPlaying ? "停止朗读" : "朗读这句"}
       className="mt-2 flex items-center gap-1 text-xs rounded-lg px-2 py-1 transition-all"
       style={{
         background: isPlaying ? "#f59e0b22" : "transparent",
