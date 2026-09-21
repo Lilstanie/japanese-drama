@@ -328,7 +328,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
             className="text-sm px-3 py-1.5 rounded-lg border flex-shrink-0"
             style={{ color: "#7dd3fc", borderColor: "#334155" }}
           >
-            {isQuiz ? "← 返回记忆表" : "← 戻る"}
+            {isQuiz ? "← 返回记忆表" : "← 首页"}
           </Link>
 
           <div className="flex-1 min-w-0">
@@ -352,7 +352,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
               </div>
             ) : (
               <span className="text-sm font-medium tabular-nums" style={{ color: "#cbd5e1" }}>
-                Saved progress: {totalCorrect} correct · {totalWrong} wrong
+                已保存进度：答对 {totalCorrect} · 答错 {totalWrong}
               </span>
             )}
           </div>
@@ -362,7 +362,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
             className="text-xs px-3 py-1.5 rounded-lg border flex-shrink-0"
             style={{ color: "#94a3b8", borderColor: "#334155" }}
           >
-            リセット
+            重置
           </button>
         </div>
       </div>
@@ -371,15 +371,15 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
         {/* Title */}
         <div className="text-center mb-6">
           <h1 className="text-3xl font-bold mb-1" style={{ color: "#7dd3fc", fontFamily: "serif" }}>
-              {mode === "memorise" ? "仮名練習（记忆表）" : "仮名練習（テスト）"}
+              {mode === "memorise" ? "仮名練習（记忆表）" : "仮名練習（测验）"}
           </h1>
           <p className="text-xs" style={{ color: "#94a3b8" }}>
               {mode === "memorise"
                 ? "看熟每个假名（不要抄答案）"
-                : "在 Practice 区输入 romaji，实时显示正误"}
+                : "在下方输入 romaji（罗马音），实时显示正误"}
           </p>
           <p className="text-xs mt-1" style={{ color: "#64748b" }}>
-              Correct {totalCorrect} · Wrong {totalWrong}
+              答对 {totalCorrect} · 答错 {totalWrong}
           </p>
         </div>
 
@@ -393,7 +393,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
               borderColor: !isQuiz ? "#38bdf8" : "#334155",
             }}
           >
-            Memorise
+            记忆
           </Link>
           <Link
             href="/practice/quiz"
@@ -404,7 +404,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
               borderColor: isQuiz ? "#38bdf8" : "#334155",
             }}
           >
-            Quiz
+            测验
           </Link>
         </div>
 
@@ -464,7 +464,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
         {mode === "memorise" ? (
           <div className="mb-10">
             <div className="mb-3 text-sm font-semibold" style={{ color: "#cbd5e1" }}>
-              Memorise（记忆表）
+              记忆表
             </div>
             <KanaMemoriseGrid rows={rows} showOrigin={showOrigin} />
 
@@ -474,14 +474,14 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
                 className="text-sm font-semibold rounded-full px-5 py-2.5"
                 style={{ background: "#38bdf8", color: "#020617" }}
               >
-                开始 Quiz →
+                开始测验 →
               </Link>
             </div>
           </div>
         ) : (
           <div>
             <div className="mb-3 text-sm font-semibold" style={{ color: "#cbd5e1" }}>
-              Practice（测试区）
+              测试区
             </div>
 
             <KanaGrid rows={rows} inputs={inputs} showOrigin={false} onChange={handleInput} />

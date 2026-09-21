@@ -28,7 +28,12 @@ export default function SceneSelector({ scenarios }: { scenarios: Scenario[] }) 
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
+      <div className="w-full max-w-4xl flex flex-col gap-10">
+        <section>
+          <h2 className="text-sm font-semibold mb-3 px-1" style={{ color: "#a07850" }}>
+            🎭 情景练习 <span style={{ color: "#5c3d1e" }}>· 和 AI 角色对话</span>
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {scenarios.map((scenario) => (
           <Link key={scenario.id} href={`/scene/${scenario.id}`}>
             <div
@@ -64,7 +69,14 @@ export default function SceneSelector({ scenarios }: { scenarios: Scenario[] }) 
             </div>
           </Link>
         ))}
+          </div>
+        </section>
 
+        <section>
+          <h2 className="text-sm font-semibold mb-3 px-1" style={{ color: "#a07850" }}>
+            🧰 学习工具 <span style={{ color: "#5c3d1e" }}>· 播客、假名练习和知识问答</span>
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Podcast card */}
         <Link href="/podcast">
           <div
@@ -164,6 +176,8 @@ export default function SceneSelector({ scenarios }: { scenarios: Scenario[] }) 
             </div>
           </div>
         </Link>
+          </div>
+        </section>
       </div>
 
       <p className="mt-12 text-sm" style={{ color: "#5c3d1e" }}>
