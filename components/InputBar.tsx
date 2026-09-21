@@ -7,11 +7,14 @@ export default function InputBar({
   onContinue,
   onReset,
   disabled,
+  suggestions,
 }: {
   onSend: (text: string) => void
   onContinue: () => void
   onReset: () => void
   disabled: boolean
+  /** Tappable quick-reply chips shown above the input (e.g. scenario starters). */
+  suggestions?: string[]
 }) {
   const [value, setValue] = useState("")
   const [isListening, setIsListening] = useState(false)
@@ -150,7 +153,27 @@ export default function InputBar({
       className="border-t px-4 py-3"
       style={{ borderColor: "#3d2010", background: "#140a02" }}
     >
-      <div className="flex gap-2 items-end max-w-full">
+      {/* Quick-reply chips — one tap sends, so a beginner is never stuck on a
+          blank box. Hidden while a reply is streaming. */}
+      {suggestions && suggestions.length > 0 && !disabled && (
+        <div className="flex flex-wrap items-center gap-2 mb-2.5">
+          <span className="text-xs" style={{ color: "#5c3d1e" }}>💡 试试说：</span>
+          {suggestions.map((s) => (
+            <button
+              key={s}
+              onClick={() => onSend(s)}
+              className="text-xs px-3 py-1.5 rounded-full transition-all"
+              style={{ background: "#261508", color: "#f0c080", border: "1px solid #5c3010" }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row gap-2 sm:items-end max-w-full">
+        {/* Mic + textarea stay together as one row even on mobile. */}
+        <div className="flex gap-2 items-end flex-1 min-w-0">
         {/* Mic button */}
         {hasSpeech && (
           <button
@@ -170,7 +193,7 @@ export default function InputBar({
           </button>
         )}
 
-        <div className="flex-1 relative">
+        <div className="flex-1 relative min-w-0">
           <textarea
             ref={textareaRef}
             value={value}
@@ -186,7 +209,7 @@ export default function InputBar({
                 ? "正在聆听… 请说日语"
                 : disabled
                 ? "等待回复中…"
-                : "用日语回复 · 或 @教练 开头提问 · Enter 发送"
+                : "用日语回复，或 @教练 提问"
             }
             className="w-full resize-none rounded-xl px-4 py-2.5 text-sm outline-none transition-colors"
             style={{
@@ -223,11 +246,14 @@ export default function InputBar({
             </span>
           )}
         </div>
+        </div>
 
+        {/* Action buttons — their own row on mobile so the textarea stays full width. */}
+        <div className="flex gap-2 items-end justify-end">
         <button
           onClick={submit}
           disabled={disabled || !value.trim()}
-          className="px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
+          className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap"
           style={{
             background:
               disabled || !value.trim() ? "#3d2010" : "#f59e0b",
@@ -256,7 +282,7 @@ export default function InputBar({
         <button
           onClick={onReset}
           disabled={disabled}
-          className="px-3 py-2.5 rounded-xl text-sm transition-all"
+          className="px-3 py-2.5 rounded-xl text-sm transition-all whitespace-nowrap"
           style={{
             background: "transparent",
             color: disabled ? "#3d2010" : "#7a5c38",
@@ -268,6 +294,7 @@ export default function InputBar({
         >
           重置
         </button>
+        </div>
       </div>
 
       <p className="text-xs mt-2" style={{ color: "#3d2010" }}>

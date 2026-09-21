@@ -10,6 +10,7 @@ const BASE_SCENARIOS: Scenario[] = [
     character: { name: "田中さん", role: "店员" },
     opening: "いらっしゃいませ！何かお探しですか？",
     difficulty: "N5",
+    starters: ["おすすめは何ですか？", "お茶はどこですか？", "いくらですか？"],
   },
   {
     id: "izakaya",
@@ -20,6 +21,7 @@ const BASE_SCENARIOS: Scenario[] = [
     character: { name: "Kenji", role: "朋友" },
     opening: "お疲れ！何飲む？ビールでいい？",
     difficulty: "N4",
+    starters: ["ビールでいいよ！", "おすすめは？", "乾杯！"],
   },
   {
     id: "train-station",
@@ -30,6 +32,7 @@ const BASE_SCENARIOS: Scenario[] = [
     character: { name: "駅員さん", role: "站务员" },
     opening: "どうされましたか？お困りですか？",
     difficulty: "N5",
+    starters: ["渋谷に行きたいです。", "東口はどこですか？", "道に迷いました。"],
   },
   {
     id: "ski-resort",
@@ -40,6 +43,7 @@ const BASE_SCENARIOS: Scenario[] = [
     character: { name: "鈴木(すずき)コーチ", role: "スノーボード教練" },
     opening: "よし、準備(じゅんび)はいい？スノーボードは最初(さいしょ)ちょっと難(むずか)しいけど、絶対(ぜったい)できるよ！まずは体(からだ)の重心(じゅうしん)から教(おし)えてあげるね。",
     difficulty: "N4",
+    starters: ["はい、お願いします！", "どうやって止まりますか？", "もう一回お願いします。"],
   },
 ]
 

@@ -264,6 +264,9 @@ export default function DialogPanel({
   const { voiceFor } = useVoices()
   // AI voice (Camb / ElevenLabs) vs the browser's built-in speech synthesis.
   const [useAIVoice, setUseAIVoice] = useState(true)
+  // Voice source + per-side voice pickers are advanced settings most learners
+  // never touch, so they stay collapsed behind a toggle to keep the header calm.
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false)
   const prevLengthRef = useRef(messages.length)
 
   useEffect(() => {
@@ -379,56 +382,74 @@ export default function DialogPanel({
         <span className="text-xs" style={{ color: "#7a5c38" }}>との会話</span>
       </div>
 
-      {/* Header row 2: voice source, selectors, auto-play */}
+      {/* Header row 2: a settings toggle, auto-play, and (when opened) the voice
+          source + per-side voice pickers. */}
       <div className="px-4 pb-2 border-b flex flex-wrap gap-x-3 gap-y-1 items-center"
         style={{ borderColor: "#3d2010", background: "#1a0c02" }}>
         <button
-          onClick={() => {
-            cancelSpeech()
-            window.speechSynthesis?.cancel()
-            setPlayingId(null)
-            setUseAIVoice(v => !v)
-          }}
-          className="text-xs px-2.5 py-1 rounded-lg border transition-all"
-          title={useAIVoice
-            ? "正在用 AI 语音（日语母语发音）· 点击切换为浏览器语音"
-            : "正在用浏览器语音 · 点击切换为 AI 语音"}
-          style={useAIVoice
-            ? { background: "#5eead4", color: "#08201c", borderColor: "#5eead4", fontWeight: 600 }
+          onClick={() => setShowVoiceSettings(v => !v)}
+          className="text-xs px-2.5 py-1 rounded-lg border transition-all shrink-0 whitespace-nowrap"
+          title="语音设置：选择 AI / 浏览器语音和音色"
+          aria-expanded={showVoiceSettings}
+          style={showVoiceSettings
+            ? { background: "#261508", color: "#f0c080", borderColor: "#5c3010" }
             : { background: "transparent", color: "#7a5c38", borderColor: "#3d2010" }
           }
         >
-          {useAIVoice ? "🎙 AI 语音" : "💻 浏览器语音"}
+          ⚙ 语音{showVoiceSettings ? " ▲" : ""}
         </button>
 
-        {/* Each mode shows only the pickers that drive it. */}
-        {useAIVoice ? (
+        {showVoiceSettings && (
           <>
-            <VoicePicker role="character" label="角色" />
-            <VoicePicker role="narrator" label="我" />
-          </>
-        ) : null}
+            <button
+              onClick={() => {
+                cancelSpeech()
+                window.speechSynthesis?.cancel()
+                setPlayingId(null)
+                setUseAIVoice(v => !v)
+              }}
+              className="text-xs px-2.5 py-1 rounded-lg border transition-all"
+              title={useAIVoice
+                ? "正在用 AI 语音（日语母语发音）· 点击切换为浏览器语音"
+                : "正在用浏览器语音 · 点击切换为 AI 语音"}
+              style={useAIVoice
+                ? { background: "#5eead4", color: "#08201c", borderColor: "#5eead4", fontWeight: 600 }
+                : { background: "transparent", color: "#7a5c38", borderColor: "#3d2010" }
+              }
+            >
+              {useAIVoice ? "🎙 AI 语音" : "💻 浏览器语音"}
+            </button>
 
-        {!useAIVoice && jaVoices.length > 0 && (
-          <>
-            <VoiceSelect
-              label="角色声音"
-              voices={jaVoices}
-              value={charVoice}
-              onChange={v => { setCharVoice(v); window.speechSynthesis?.cancel(); setPlayingId(null) }}
-            />
-            <VoiceSelect
-              label="我的声音"
-              voices={jaVoices}
-              value={userVoice}
-              onChange={v => { setUserVoice(v); window.speechSynthesis?.cancel(); setPlayingId(null) }}
-            />
+            {/* Each mode shows only the pickers that drive it. */}
+            {useAIVoice ? (
+              <>
+                <VoicePicker role="character" label="角色" />
+                <VoicePicker role="narrator" label="我" />
+              </>
+            ) : null}
+
+            {!useAIVoice && jaVoices.length > 0 && (
+              <>
+                <VoiceSelect
+                  label="角色声音"
+                  voices={jaVoices}
+                  value={charVoice}
+                  onChange={v => { setCharVoice(v); window.speechSynthesis?.cancel(); setPlayingId(null) }}
+                />
+                <VoiceSelect
+                  label="我的声音"
+                  voices={jaVoices}
+                  value={userVoice}
+                  onChange={v => { setUserVoice(v); window.speechSynthesis?.cancel(); setPlayingId(null) }}
+                />
+              </>
+            )}
           </>
         )}
 
           <button
             onClick={() => setAutoPlay(v => !v)}
-            className="ml-auto text-xs px-2.5 py-1 rounded-lg border transition-all"
+            className="ml-auto text-xs px-2.5 py-1 rounded-lg border transition-all shrink-0 whitespace-nowrap"
             title={autoPlay ? "关闭自动朗读" : "开启自动朗读角色台词"}
             style={autoPlay
               ? { background: "#f59e0b22", color: "#f59e0b", borderColor: "#f59e0b55" }

@@ -262,10 +262,10 @@ export default function SceneClient({ scenario }: { scenario: Scenario }) {
   return (
     <div className="flex flex-col h-screen" style={{ background: "#1a1008" }}>
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b shrink-0"
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 border-b shrink-0"
         style={{ borderColor: "#3d2010", background: "#140a02" }}>
         <button onClick={() => router.push("/")}
-          className="text-sm px-3 py-1 rounded-lg transition-colors"
+          className="text-sm px-3 py-1 rounded-lg transition-colors shrink-0 whitespace-nowrap"
           style={{ color: "#7a5c38", border: "1px solid #3d2010" }}>
           ← 场景
         </button>
@@ -273,9 +273,9 @@ export default function SceneClient({ scenario }: { scenario: Scenario }) {
         <span className="text-lg">{scenario.emoji}</span>
         <span className="font-bold" style={{ color: "#f59e0b", fontFamily: "serif" }}>{scenario.titleJa}</span>
         <span className="text-sm hidden sm:inline" style={{ color: "#7a5c38" }}>{scenario.title}</span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           <button onClick={() => setShowRomaji(v => !v)}
-            className="text-xs px-3 py-1 rounded-lg transition-all"
+            className="text-xs px-3 py-1 rounded-lg transition-all shrink-0 whitespace-nowrap"
             style={{
               background: showRomaji ? "#f59e0b" : "#261508",
               color: showRomaji ? "#1a0c02" : "#a07850",
@@ -287,7 +287,7 @@ export default function SceneClient({ scenario }: { scenario: Scenario }) {
           <KatakanaToggle />
           <button
             onClick={handleReset}
-            className="text-xs px-3 py-1 rounded-lg transition-all"
+            className="text-xs px-3 py-1 rounded-lg transition-all shrink-0 whitespace-nowrap"
             style={{
               background: "transparent",
               color: "#7a5c38",
@@ -345,7 +345,15 @@ export default function SceneClient({ scenario }: { scenario: Scenario }) {
 
       {/* Input bar */}
       <div className="shrink-0">
-        <InputBar onSend={handleSend} onContinue={handleContinue} onReset={handleReset} disabled={isDisabled} />
+        <InputBar
+          onSend={handleSend}
+          onContinue={handleContinue}
+          onReset={handleReset}
+          disabled={isDisabled}
+          suggestions={
+            dialogMessages.some((m) => m.role === "user") ? undefined : scenario.starters
+          }
+        />
       </div>
     </div>
   )

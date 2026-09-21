@@ -22,4 +22,7 @@ export type Scenario = {
   character: { name: string; role: string }
   opening: string
   difficulty: string
+  /** Optional beginner quick-reply phrases, shown as tappable chips before the
+   *  learner has said anything so they are never stuck facing a blank box. */
+  starters?: string[]
 }

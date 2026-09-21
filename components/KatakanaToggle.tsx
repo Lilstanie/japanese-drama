@@ -23,7 +23,7 @@ export default function KatakanaToggle({
   return (
     <button
       onClick={toggleKatakanaEn}
-      className="text-xs px-3 py-1 rounded-lg transition-all"
+      className="text-xs px-3 py-1 rounded-lg transition-all shrink-0 whitespace-nowrap"
       style={{
         background: showKatakanaEn ? activeColor : idleBackground,
         color: showKatakanaEn ? "#08201c" : idleColor,
