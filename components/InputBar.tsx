@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import { useLang } from "@/components/LanguageProvider"
 
 export default function InputBar({
   onSend,
@@ -16,6 +17,7 @@ export default function InputBar({
   /** Tappable quick-reply chips shown above the input (e.g. scenario starters). */
   suggestions?: string[]
 }) {
+  const { t } = useLang()
   const [value, setValue] = useState("")
   const [isListening, setIsListening] = useState(false)
   const [interimText, setInterimText] = useState("")
@@ -145,7 +147,7 @@ export default function InputBar({
     startRecognition()
   }
 
-  const isCoachQuestion = value.startsWith("@教练")
+  const isCoachQuestion = /^@(教练|coach)/i.test(value)
   const displayInterim = isListening && interimText
 
   return (
@@ -157,7 +159,7 @@ export default function InputBar({
           blank box. Hidden while a reply is streaming. */}
       {suggestions && suggestions.length > 0 && !disabled && (
         <div className="flex flex-wrap items-center gap-2 mb-2.5">
-          <span className="text-xs" style={{ color: "#5c3d1e" }}>💡 试试说：</span>
+          <span className="text-xs" style={{ color: "#5c3d1e" }}>{t("ib.try")}</span>
           {suggestions.map((s) => (
             <button
               key={s}
@@ -180,8 +182,8 @@ export default function InputBar({
             type="button"
             onClick={toggleListening}
             disabled={disabled}
-            aria-label={isListening ? "停止录音" : "语音输入（日语）"}
-            title={isListening ? "停止录音" : "语音输入（日语）"}
+            aria-label={isListening ? t("ib.mic.stop") : t("ib.mic")}
+            title={isListening ? t("ib.mic.stop") : t("ib.mic")}
             className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-base transition-all"
             style={{
               background: isListening ? "#7f1d1d" : disabled ? "#1e0e04" : "#2d1508",
@@ -208,10 +210,10 @@ export default function InputBar({
             rows={1}
             placeholder={
               isListening
-                ? "正在聆听… 请说日语"
+                ? t("ib.placeholder.listening")
                 : disabled
-                ? "等待回复中…"
-                : "用日语回复，或 @教练 提问"
+                ? t("ib.placeholder.disabled")
+                : t("ib.placeholder")
             }
             className="w-full resize-none rounded-xl px-4 py-2.5 text-sm outline-none transition-colors"
             style={{
@@ -236,7 +238,7 @@ export default function InputBar({
               className="absolute right-3 top-2.5 text-xs"
               style={{ color: "#60a5fa" }}
             >
-              问教练
+              {t("ib.askCoach")}
             </span>
           )}
           {isListening && (
@@ -244,7 +246,7 @@ export default function InputBar({
               className="absolute right-3 top-2.5 text-xs"
               style={{ color: "#f87171" }}
             >
-              ● 录音中
+              {t("ib.recording")}
             </span>
           )}
         </div>
@@ -263,7 +265,7 @@ export default function InputBar({
             cursor: disabled || !value.trim() ? "not-allowed" : "pointer",
           }}
         >
-          发送
+          {t("ib.send")}
         </button>
 
         <button
@@ -278,7 +280,7 @@ export default function InputBar({
             cursor: disabled ? "not-allowed" : "pointer",
           }}
         >
-          让角色继续
+          {t("ib.continue")}
         </button>
 
         <button
@@ -292,16 +294,16 @@ export default function InputBar({
             borderColor: disabled ? "#2d1508" : "#5c3010",
             cursor: disabled ? "not-allowed" : "pointer",
           }}
-          title="重置场景"
+          title={t("ib.reset")}
         >
-          重置
+          {t("ib.reset")}
         </button>
         </div>
       </div>
 
       <p className="text-xs mt-2" style={{ color: "#3d2010" }}>
-        Enter 发送 · Shift+Enter 换行 · @教练 直接提问教练
-        {hasSpeech && " · 🎤 语音输入日语"}
+        {t("ib.helper")}
+        {hasSpeech && t("ib.helper.mic")}
       </p>
 
       <style>{`

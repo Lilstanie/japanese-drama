@@ -6,6 +6,7 @@ import { convertToRomaji, convertToRomajiTokens, type RomajiToken } from "@/lib/
 import JapaneseText from "@/components/JapaneseText"
 import { speakLine, cancelSpeech, toSpeechText } from "@/lib/tts"
 import { useVoices } from "@/components/VoiceProvider"
+import { useLang } from "@/components/LanguageProvider"
 import VoicePicker from "@/components/VoicePicker"
 
 function isFemaleVoice(name: string) {
@@ -80,13 +81,14 @@ function SpeakButton({
   id: string; text: string; playingId: string | null
   onPlay: (id: string, text: string) => void; onStop: () => void
 }) {
+  const { t } = useLang()
   const isPlaying = playingId === id
   return (
     <button
       type="button"
       onClick={() => isPlaying ? onStop() : onPlay(id, text)}
-      aria-label={isPlaying ? "停止朗读" : "朗读这句"}
-      title={isPlaying ? "停止朗读" : "朗读这句"}
+      aria-label={isPlaying ? t("dp.speak.stop") : t("dp.speak")}
+      title={isPlaying ? t("dp.speak.stop") : t("dp.speak")}
       className="mt-2 flex items-center gap-1 text-xs rounded-lg px-2 py-1 transition-all"
       style={{
         background: isPlaying ? "#f59e0b22" : "transparent",
@@ -123,6 +125,7 @@ function InteractiveRomaji({
   speakingWord: string | null
   onSpeakWord: (msgId: string, index: number, token: RomajiToken, isUser: boolean) => void
 }) {
+  const { t: tr } = useLang()
   const tokens = useMemo(() => convertToRomajiTokens(text), [text])
   const [hovered, setHovered] = useState<number | null>(null)
 
@@ -184,7 +187,7 @@ function InteractiveRomaji({
                 onMouseEnter={s.onMouseEnter}
                 onMouseLeave={s.onMouseLeave}
                 onClick={s.onClick}
-                title={s.clickable ? `🔊 点击朗读「${t.speak}」` : undefined}
+                title={s.clickable ? tr("dp.tapWord", { w: t.speak }) : undefined}
                 style={{
                   cursor: s.clickable ? "pointer" : "default",
                   background: s.background,
@@ -252,6 +255,7 @@ export default function DialogPanel({
   messages: Message[]; characterName: string
   isStreaming: boolean; streamingText: string; showRomaji: boolean
 }) {
+  const { t } = useLang()
   const bottomRef = useRef<HTMLDivElement>(null)
   const [playingId, setPlayingId] = useState<string | null>(null)
   // A single word being pronounced from the romaji line, keyed `${msgId}#${i}`.
@@ -392,14 +396,14 @@ export default function DialogPanel({
         <button
           onClick={() => setShowVoiceSettings(v => !v)}
           className="text-xs px-2.5 py-1 rounded-lg border transition-all shrink-0 whitespace-nowrap"
-          title="语音设置：选择 AI / 浏览器语音和音色"
+          title={t("dp.voice.title")}
           aria-expanded={showVoiceSettings}
           style={showVoiceSettings
             ? { background: "#261508", color: "#f0c080", borderColor: "#5c3010" }
             : { background: "transparent", color: "#7a5c38", borderColor: "#3d2010" }
           }
         >
-          ⚙ 语音{showVoiceSettings ? " ▲" : ""}
+          {t("dp.voice")}{showVoiceSettings ? " ▲" : ""}
         </button>
 
         {showVoiceSettings && (
@@ -420,27 +424,27 @@ export default function DialogPanel({
                 : { background: "transparent", color: "#7a5c38", borderColor: "#3d2010" }
               }
             >
-              {useAIVoice ? "🎙 AI 语音" : "💻 浏览器语音"}
+              {useAIVoice ? t("dp.aiVoice") : t("dp.browserVoice")}
             </button>
 
             {/* Each mode shows only the pickers that drive it. */}
             {useAIVoice ? (
               <>
-                <VoicePicker role="character" label="角色" />
-                <VoicePicker role="narrator" label="我" />
+                <VoicePicker role="character" label={t("dp.role.character")} />
+                <VoicePicker role="narrator" label={t("dp.role.me")} />
               </>
             ) : null}
 
             {!useAIVoice && jaVoices.length > 0 && (
               <>
                 <VoiceSelect
-                  label="角色声音"
+                  label={t("dp.charVoice")}
                   voices={jaVoices}
                   value={charVoice}
                   onChange={v => { setCharVoice(v); window.speechSynthesis?.cancel(); setPlayingId(null) }}
                 />
                 <VoiceSelect
-                  label="我的声音"
+                  label={t("dp.myVoice")}
                   voices={jaVoices}
                   value={userVoice}
                   onChange={v => { setUserVoice(v); window.speechSynthesis?.cancel(); setPlayingId(null) }}
@@ -453,13 +457,13 @@ export default function DialogPanel({
           <button
             onClick={() => setAutoPlay(v => !v)}
             className="ml-auto text-xs px-2.5 py-1 rounded-lg border transition-all shrink-0 whitespace-nowrap"
-            title={autoPlay ? "关闭自动朗读" : "开启自动朗读角色台词"}
+            title={autoPlay ? t("dp.auto.off") : t("dp.auto.on")}
             style={autoPlay
               ? { background: "#f59e0b22", color: "#f59e0b", borderColor: "#f59e0b55" }
               : { background: "transparent", color: "#5c3d1e", borderColor: "#3d2010" }
             }
           >
-            {autoPlay ? "🔊 自动" : "🔇 手动"}
+            {autoPlay ? t("dp.auto") : t("dp.manual")}
           </button>
       </div>
 
@@ -475,7 +479,7 @@ export default function DialogPanel({
             has replied, so a fresh scene never looks like a dead end. */}
         {!isStreaming && messages.length > 0 && !messages.some(m => m.role === "user") && (
           <div className="text-center text-xs pt-4 pb-2" style={{ color: "#5c3d1e" }}>
-            👇 轮到你了 —— 用日语回复{characterName}，或点下方的建议句开始
+            {t("dp.empty", { name: characterName })}
           </div>
         )}
 

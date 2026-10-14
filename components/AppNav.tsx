@@ -1,6 +1,8 @@
 "use client"
 
 import Link from "next/link"
+import { useLang } from "@/components/LanguageProvider"
+import LanguageToggle from "@/components/LanguageToggle"
 
 /**
  * Lightweight global navigation shared by every page.
@@ -13,11 +15,11 @@ import Link from "next/link"
  * `compact` shows icons only, for the crowded scene header.
  */
 const ITEMS = [
-  { href: "/", label: "首页", icon: "🏠", key: "home" },
-  { href: "/podcast", label: "播客", icon: "🎙️", key: "podcast" },
-  { href: "/practice", label: "练习", icon: "📖", key: "practice" },
-  { href: "/rag", label: "问答", icon: "🔍", key: "rag" },
-]
+  { href: "/", icon: "🏠", key: "home" },
+  { href: "/podcast", icon: "🎙️", key: "podcast" },
+  { href: "/practice", icon: "📖", key: "practice" },
+  { href: "/rag", icon: "🔍", key: "rag" },
+] as const
 
 export default function AppNav({
   active,
@@ -26,17 +28,19 @@ export default function AppNav({
   active?: "home" | "podcast" | "practice" | "rag"
   compact?: boolean
 }) {
+  const { t } = useLang()
   return (
     <nav className="flex items-center gap-1 overflow-x-auto max-w-full">
       {ITEMS.map((it) => {
         const on = it.key === active
+        const label = t(`nav.${it.key}`)
         return (
           <Link
             key={it.key}
             href={it.href}
             aria-current={on ? "page" : undefined}
-            aria-label={it.label}
-            title={it.label}
+            aria-label={label}
+            title={label}
             className="text-xs px-2.5 py-1 rounded-lg border shrink-0 whitespace-nowrap transition-all"
             style={
               on
@@ -45,10 +49,13 @@ export default function AppNav({
             }
           >
             {it.icon}
-            {compact ? "" : ` ${it.label}`}
+            {compact ? "" : ` ${label}`}
           </Link>
         )
       })}
+      <span className="ml-1 shrink-0">
+        <LanguageToggle />
+      </span>
     </nav>
   )
 }

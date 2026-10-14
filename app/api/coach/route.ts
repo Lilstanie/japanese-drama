@@ -3,7 +3,17 @@ import type { Message } from "@/lib/types"
 import { getScenario } from "@/lib/scenarios"
 import { enforceRateLimit, rejectBots, rejectTooLong } from "@/lib/rate-limit"
 
-function buildCoachPrompt(scenarioContext: string) {
+type Lang = "zh" | "en"
+
+function buildCoachPrompt(scenarioContext: string, lang: Lang) {
+  if (lang === "en") {
+    return `You are a friendly Japanese tutor helping an English speaker learn Japanese.${scenarioContext}
+After each line the Japanese character says, reply in English:
+1. Translate it naturally (not word-for-word)
+2. Point out 1-2 grammar points or vocabulary worth learning, briefly
+3. Suggest 1-2 Japanese sentences the user could reply with (with English meaning)
+Sound like a friend, not a textbook. Be concise and fun.`
+  }
   return `你是一个亲切的中文日语教练，正在陪一个中文母语者学日语。${scenarioContext}
 你的任务是在每次日本角色说话后，用中文：
 1. 翻译那句日语（自然的中文，不要逐字翻译）
@@ -12,7 +22,11 @@ function buildCoachPrompt(scenarioContext: string) {
 语气要像朋友，不要像教科书。简洁，有趣。`
 }
 
-function buildQuestionPrompt(scenarioContext: string) {
+function buildQuestionPrompt(scenarioContext: string, lang: Lang) {
+  if (lang === "en") {
+    return `You are a friendly Japanese tutor helping an English speaker learn Japanese.${scenarioContext}
+The user is asking you a question (their message started with @coach). Answer directly in English, like a friend — concise and useful.`
+  }
   return `你是一个亲切的中文日语教练，正在陪一个中文母语者学日语。${scenarioContext}
 用户用@教练开头向你提问。请直接用中文回答他的问题，语气像朋友，简洁有用。`
 }
@@ -26,14 +40,17 @@ export async function POST(request: Request) {
 
   const client = createAIClient()
 
-  const { characterLine, dialogMessages, isDirectQuestion, question, scenarioId } =
+  const { characterLine, dialogMessages, isDirectQuestion, question, scenarioId, lang: rawLang } =
     await request.json() as {
       characterLine?: string
       dialogMessages: Message[]
       isDirectQuestion?: boolean
       question?: string
       scenarioId?: string
+      lang?: string
     }
+
+  const lang: Lang = rawLang === "en" ? "en" : "zh"
 
   const tooLong =
     rejectTooLong(characterLine, 4000, "characterLine") ??
@@ -42,7 +59,9 @@ export async function POST(request: Request) {
 
   const scenario = scenarioId ? getScenario(scenarioId) : undefined
   const scenarioContext = scenario
-    ? `\n当前学习场景：${scenario.description}（角色：${scenario.character.name}，${scenario.character.role}）\n`
+    ? lang === "en"
+      ? `\nCurrent scene: ${scenario.description_en ?? scenario.description}（character: ${scenario.character.name}, ${scenario.character.role_en ?? scenario.character.role}）\n`
+      : `\n当前学习场景：${scenario.description}（角色：${scenario.character.name}，${scenario.character.role}）\n`
     : "\n"
 
   const encoder = new TextEncoder()
@@ -54,7 +73,7 @@ export async function POST(request: Request) {
           const response = await client.chat.completions.create({
             ...chatParams(512),
             messages: [
-              { role: "system", content: buildQuestionPrompt(scenarioContext) },
+              { role: "system", content: buildQuestionPrompt(scenarioContext, lang) },
               { role: "user", content: question },
             ],
             stream: true,
@@ -67,15 +86,22 @@ export async function POST(request: Request) {
         } else if (characterLine) {
           const recentContext = (Array.isArray(dialogMessages) ? dialogMessages : [])
             .slice(-5)
-            .map((m) => `${m.role === "user" ? "学习者" : "角色"}：${(m.content ?? "").slice(0, 4000)}`)
+            .map((m) => {
+              const who = lang === "en"
+                ? (m.role === "user" ? "Learner" : "Character")
+                : (m.role === "user" ? "学习者" : "角色")
+              return `${who}：${(m.content ?? "").slice(0, 4000)}`
+            })
             .join("\n")
 
-          const userMessage = `对话背景：\n${recentContext}\n\n日本角色刚说：「${characterLine}」\n\n请分析这句话。`
+          const userMessage = lang === "en"
+            ? `Conversation so far:\n${recentContext}\n\nThe character just said: 「${characterLine}」\n\nAnalyze this line.`
+            : `对话背景：\n${recentContext}\n\n日本角色刚说：「${characterLine}」\n\n请分析这句话。`
 
           const response = await client.chat.completions.create({
             ...chatParams(512),
             messages: [
-              { role: "system", content: buildCoachPrompt(scenarioContext) },
+              { role: "system", content: buildCoachPrompt(scenarioContext, lang) },
               { role: "user", content: userMessage },
             ],
             stream: true,

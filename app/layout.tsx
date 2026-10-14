@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import LanguageProvider from "@/components/LanguageProvider";
 import AnnotationProvider from "@/components/AnnotationProvider";
 import VoiceProvider from "@/components/VoiceProvider";
 
@@ -18,9 +19,11 @@ export default function RootLayout({
   return (
     <html lang="ja" className="h-full">
       <body className="h-full">
-        <AnnotationProvider>
-          <VoiceProvider>{children}</VoiceProvider>
-        </AnnotationProvider>
+        <LanguageProvider>
+          <AnnotationProvider>
+            <VoiceProvider>{children}</VoiceProvider>
+          </AnnotationProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

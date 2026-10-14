@@ -3,6 +3,8 @@
 import Link from "next/link"
 import Image from "next/image"
 import type { Scenario } from "@/lib/types"
+import { useLang } from "@/components/LanguageProvider"
+import LanguageToggle from "@/components/LanguageToggle"
 
 const DIFFICULTY_COLORS: Record<string, string> = {
   N5: "bg-green-900/60 text-green-300 border-green-700",
@@ -11,9 +13,13 @@ const DIFFICULTY_COLORS: Record<string, string> = {
 }
 
 export default function SceneSelector({ scenarios }: { scenarios: Scenario[] }) {
+  const { lang, t } = useLang()
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-16"
+    <div className="min-h-screen flex flex-col items-center px-4 py-16"
       style={{ background: "#1a1008" }}>
+      <div className="w-full max-w-4xl flex justify-end mb-4">
+        <LanguageToggle />
+      </div>
       <div className="mb-12 text-center flex flex-col items-center gap-3">
         <Image
           src="/logo.png"
@@ -24,14 +30,14 @@ export default function SceneSelector({ scenarios }: { scenarios: Scenario[] }) 
           priority
         />
         <p className="text-lg" style={{ color: "#d4a96a" }}>
-          沉浸式情景对话练习 · 中文教练实时辅助
+          {t("home.tagline")}
         </p>
       </div>
 
       <div className="w-full max-w-4xl flex flex-col gap-10">
         <section>
           <h2 className="text-sm font-semibold mb-3 px-1" style={{ color: "#a07850" }}>
-            🎭 情景练习 <span style={{ color: "#5c3d1e" }}>· 和 AI 角色对话</span>
+            {t("home.scenes")} <span style={{ color: "#5c3d1e" }}>{t("home.scenes.sub")}</span>
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {scenarios.map((scenario) => (
@@ -50,15 +56,15 @@ export default function SceneSelector({ scenarios }: { scenarios: Scenario[] }) 
                   {scenario.titleJa}
                 </span>
                 <span className="ml-2 text-sm" style={{ color: "#a07850" }}>
-                  {scenario.title}
+                  {lang === "en" ? (scenario.title_en ?? scenario.title) : scenario.title}
                 </span>
               </div>
               <p className="text-sm text-center mb-4" style={{ color: "#c4956a" }}>
-                {scenario.description}
+                {lang === "en" ? (scenario.description_en ?? scenario.description) : scenario.description}
               </p>
               <div className="flex items-center justify-between">
                 <span className="text-xs" style={{ color: "#7a5c38" }}>
-                  {scenario.character.name} ({scenario.character.role})
+                  {scenario.character.name} ({lang === "en" ? (scenario.character.role_en ?? scenario.character.role) : scenario.character.role})
                 </span>
                 <span
                   className={`text-xs px-2 py-0.5 rounded border ${DIFFICULTY_COLORS[scenario.difficulty] || "bg-gray-800 text-gray-400 border-gray-600"}`}
@@ -74,7 +80,7 @@ export default function SceneSelector({ scenarios }: { scenarios: Scenario[] }) 
 
         <section>
           <h2 className="text-sm font-semibold mb-3 px-1" style={{ color: "#a07850" }}>
-            🧰 学习工具 <span style={{ color: "#5c3d1e" }}>· 播客、假名练习和知识问答</span>
+            {t("home.tools")} <span style={{ color: "#5c3d1e" }}>{t("home.tools.sub")}</span>
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Podcast card */}
@@ -93,11 +99,11 @@ export default function SceneSelector({ scenarios }: { scenarios: Scenario[] }) 
                 物語 Podcast
               </span>
               <span className="ml-2 text-sm" style={{ color: "#4c3a7a" }}>
-                双语播客
+                {t("home.podcast.sub")}
               </span>
             </div>
             <p className="text-sm text-center mb-4" style={{ color: "#6d5aab" }}>
-              听Kenji和Wei用日中双语自由聊天
+              {t("home.podcast.desc")}
             </p>
             <div className="flex items-center justify-between">
               <span className="text-xs" style={{ color: "#4c3a7a" }}>🇯🇵 日本語 · 🇨🇳 中文</span>
@@ -127,11 +133,11 @@ export default function SceneSelector({ scenarios }: { scenarios: Scenario[] }) 
                 RAG Demo
               </span>
               <span className="ml-2 text-sm" style={{ color: "#3b5a80" }}>
-                知识库问答
+                {t("home.rag.sub")}
               </span>
             </div>
             <p className="text-sm text-center mb-4" style={{ color: "#6b8299" }}>
-              检索增强生成 · 带引用来源的 AI 问答
+              {t("home.rag.desc")}
             </p>
             <div className="flex items-center justify-end">
               <span
@@ -160,18 +166,18 @@ export default function SceneSelector({ scenarios }: { scenarios: Scenario[] }) 
                 仮名練習
               </span>
               <span className="ml-2 text-sm" style={{ color: "#2d6040" }}>
-                字母学习
+                {t("home.practice.sub")}
               </span>
             </div>
             <p className="text-sm text-center mb-4" style={{ color: "#3a7a50" }}>
-              平仮名・片仮名对照表及测试练习
+              {t("home.practice.desc")}
             </p>
             <div className="flex items-center justify-end">
               <span
                 className="text-xs px-2 py-0.5 rounded border"
                 style={{ background: "rgba(30,64,40,0.6)", color: "#4ade80", borderColor: "#1e4028" }}
               >
-                基础
+                {t("home.badge.basics")}
               </span>
             </div>
           </div>
@@ -181,7 +187,7 @@ export default function SceneSelector({ scenarios }: { scenarios: Scenario[] }) 
       </div>
 
       <p className="mt-12 text-sm" style={{ color: "#5c3d1e" }}>
-        点击场景开始对话 · 随时用 @教练 向教练提问
+        {t("home.footer")}
       </p>
     </div>
   )

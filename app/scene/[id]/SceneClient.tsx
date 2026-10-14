@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import KatakanaToggle from "@/components/KatakanaToggle"
 import AppNav from "@/components/AppNav"
+import { useLang } from "@/components/LanguageProvider"
 import Image from "next/image"
 import DialogPanel from "@/components/DialogPanel"
 import CoachPanel from "@/components/CoachPanel"
@@ -77,6 +78,7 @@ function fromStoredMessage(message: StoredMessage): Message {
 const TIP_KEY = "jd:v1:tip:scene"
 
 export default function SceneClient({ scenario }: { scenario: Scenario }) {
+  const { lang, t } = useLang()
   const [dialogMessages, setDialogMessages] = useState<Message[]>([
     { id: makeId(), role: "character", content: scenario.opening, timestamp: new Date() },
   ])
@@ -164,8 +166,8 @@ export default function SceneClient({ scenario }: { scenario: Scenario }) {
       const full = await streamResponse(
         "/api/coach",
         isDirectQuestion
-          ? { isDirectQuestion: true, question, dialogMessages: currentDialog, scenarioId: scenario.id }
-          : { characterLine, dialogMessages: currentDialog, scenarioId: scenario.id },
+          ? { isDirectQuestion: true, question, dialogMessages: currentDialog, scenarioId: scenario.id, lang }
+          : { characterLine, dialogMessages: currentDialog, scenarioId: scenario.id, lang },
         setCoachStreamText
       )
       setCoachMessages((prev) => [
@@ -184,9 +186,10 @@ export default function SceneClient({ scenario }: { scenario: Scenario }) {
     setActiveTab("dialog")
     setErrorMsg(null)
 
-    if (input.startsWith("@教练")) {
+    const coachMatch = input.match(/^@(教练|coach)\s*/i)
+    if (coachMatch) {
       setActiveTab("coach")
-      await runCoach("", dialogMessages, true, input.slice(3).trim())
+      await runCoach("", dialogMessages, true, input.slice(coachMatch[0].length).trim())
       return
     }
 
@@ -211,7 +214,7 @@ export default function SceneClient({ scenario }: { scenario: Scenario }) {
     } catch {
       setCharStreaming(false)
       setCharStreamText("")
-      setErrorMsg("角色回复失败，请重试")
+      setErrorMsg(t("scene.err.char"))
     }
   }
 
@@ -239,7 +242,7 @@ export default function SceneClient({ scenario }: { scenario: Scenario }) {
     } catch {
       setCharStreaming(false)
       setCharStreamText("")
-      setErrorMsg("连接失败，请重试")
+      setErrorMsg(t("scene.err.conn"))
     }
   }
 
@@ -280,7 +283,9 @@ export default function SceneClient({ scenario }: { scenario: Scenario }) {
         <Image src="/logo.png" alt="logo" width={30} height={30} className="rounded-lg shrink-0" />
         <span className="text-lg">{scenario.emoji}</span>
         <span className="font-bold" style={{ color: "#f59e0b", fontFamily: "serif" }}>{scenario.titleJa}</span>
-        <span className="text-sm hidden sm:inline" style={{ color: "#7a5c38" }}>{scenario.title}</span>
+        <span className="text-sm hidden sm:inline" style={{ color: "#7a5c38" }}>
+          {lang === "en" ? (scenario.title_en ?? scenario.title) : scenario.title}
+        </span>
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           <button onClick={() => setShowRomaji(v => !v)}
             className="text-xs px-3 py-1 rounded-lg transition-all shrink-0 whitespace-nowrap"
@@ -301,9 +306,9 @@ export default function SceneClient({ scenario }: { scenario: Scenario }) {
               color: "#7a5c38",
               border: "1px solid #3d2010",
             }}
-            title="清空此场景历史记录"
+            title={t("scene.clear")}
           >
-            清空历史
+            {t("scene.clear")}
           </button>
           <span className="text-xs px-2 py-0.5 rounded hidden sm:inline"
             style={{ background: "#261508", color: "#a07850", border: "1px solid #5c3010" }}>
@@ -316,22 +321,19 @@ export default function SceneClient({ scenario }: { scenario: Scenario }) {
       {showTip && (
         <div className="flex items-center gap-2 px-4 py-2 shrink-0 text-xs"
           style={{ background: "#2a1a08", borderBottom: "1px solid #3d2010", color: "#d4a96a" }}>
-          <span>
-            💡 打开右上角 <b style={{ color: "#f59e0b" }}>ローマ字</b> 看每个词的读音，
-            <b style={{ color: "#f59e0b" }}>点任意单词</b> 即可跟读发音。
-          </span>
+          <span>{t("scene.tip")}</span>
           <button onClick={dismissTip}
             className="ml-auto px-2 py-0.5 rounded shrink-0 whitespace-nowrap"
             style={{ color: "#a07850", border: "1px solid #3d2010" }}>
-            知道了 ✕
+            {t("scene.tip.dismiss")}
           </button>
         </div>
       )}
 
       {/* Mobile tab bar */}
       <div className="flex md:hidden border-b shrink-0" style={{ borderColor: "#3d2010", background: "#1a0c02" }}>
-        {tabBtn("dialog", "💬 对话")}
-        {tabBtn("coach", "🧑‍🏫 教练", hasNewCoach)}
+        {tabBtn("dialog", t("scene.tab.dialog"))}
+        {tabBtn("coach", t("scene.tab.coach"), hasNewCoach)}
       </div>
 
       {/* Error banner */}
