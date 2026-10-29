@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import AppNav from "@/components/AppNav"
+import { useLang } from "@/components/LanguageProvider"
 import { HIRAGANA_ROWS, KATAKANA_ROWS, type KanaEntry, type KanaRow } from "@/lib/kana"
 import { getFromStorage, KANA_PROGRESS_STORAGE_KEY, removeFromStorage, setToStorage } from "@/lib/persistence"
 
@@ -217,6 +218,7 @@ function KanaGrid({
 }
 
 export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPracticeMode }) {
+  const { t } = useLang()
   const [tab, setTab] = useState<Tab>("hiragana")
   const [inputs, setInputs] = useState<Record<string, string>>({})
   const [showOrigin, setShowOrigin] = useState(true)
@@ -347,7 +349,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
               </div>
             ) : (
               <span className="text-sm font-medium tabular-nums" style={{ color: "#cbd5e1" }}>
-                已保存进度：答对 {totalCorrect} · 答错 {totalWrong}
+                {t("pr.saved", { c: String(totalCorrect), w: String(totalWrong) })}
               </span>
             )}
           </div>
@@ -357,7 +359,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
             className="text-xs px-3 py-1.5 rounded-lg border flex-shrink-0"
             style={{ color: "#94a3b8", borderColor: "#334155" }}
           >
-            重置
+            {t("pr.reset")}
           </button>
         </div>
       </div>
@@ -366,15 +368,13 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
         {/* Title */}
         <div className="text-center mb-6">
           <h1 className="text-3xl font-bold mb-1" style={{ color: "#7dd3fc", fontFamily: "serif" }}>
-              {mode === "memorise" ? "仮名練習（记忆表）" : "仮名練習（测验）"}
+              {mode === "memorise" ? t("pr.title.mem") : t("pr.title.quiz")}
           </h1>
           <p className="text-xs" style={{ color: "#94a3b8" }}>
-              {mode === "memorise"
-                ? "看熟每个假名（不要抄答案）"
-                : "在下方输入 romaji（罗马音），实时显示正误"}
+              {mode === "memorise" ? t("pr.sub.mem") : t("pr.sub.quiz")}
           </p>
           <p className="text-xs mt-1" style={{ color: "#64748b" }}>
-              答对 {totalCorrect} · 答错 {totalWrong}
+              {t("pr.score", { c: String(totalCorrect), w: String(totalWrong) })}
           </p>
         </div>
 
@@ -388,7 +388,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
               borderColor: !isQuiz ? "#38bdf8" : "#334155",
             }}
           >
-            记忆
+            {t("pr.mem")}
           </Link>
           <Link
             href="/practice/quiz"
@@ -399,7 +399,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
               borderColor: isQuiz ? "#38bdf8" : "#334155",
             }}
           >
-            测验
+            {t("pr.quiz")}
           </Link>
         </div>
 
@@ -429,7 +429,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
             className="text-xs px-3 py-1.5 rounded-lg border"
             style={{ color: "#64748b", borderColor: "#334155" }}
           >
-            清空所有进度
+            {t("pr.clearAll")}
           </button>
 
           <div className="flex items-center gap-4">
@@ -441,7 +441,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
                   onChange={(e) => setShowOrigin(e.target.checked)}
                   className="accent-amber-500"
                 />
-                显示汉字起源
+                {t("pr.showOrigin")}
               </label>
             )}
 
@@ -451,7 +451,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
                 checked={hideVoiced}
                 onChange={(e) => setHideVoiced(e.target.checked)}
               />
-              隐藏浊音
+              {t("pr.hideVoiced")}
             </label>
           </div>
         </div>
@@ -459,7 +459,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
         {mode === "memorise" ? (
           <div className="mb-10">
             <div className="mb-3 text-sm font-semibold" style={{ color: "#cbd5e1" }}>
-              记忆表
+              {t("pr.memTable")}
             </div>
             <KanaMemoriseGrid rows={rows} showOrigin={showOrigin} />
 
@@ -469,14 +469,14 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
                 className="text-sm font-semibold rounded-full px-5 py-2.5"
                 style={{ background: "#38bdf8", color: "#020617" }}
               >
-                开始测验 →
+                {t("pr.startQuiz")}
               </Link>
             </div>
           </div>
         ) : (
           <div>
             <div className="mb-3 text-sm font-semibold" style={{ color: "#cbd5e1" }}>
-              测试区
+              {t("pr.testArea")}
             </div>
 
             <KanaGrid rows={rows} inputs={inputs} showOrigin={false} onChange={handleInput} />
@@ -505,7 +505,7 @@ export default function KanaPractice({ mode = "memorise" }: { mode?: KanaPractic
             )}
 
             <p className="text-center mt-8 text-xs" style={{ color: "#64748b" }}>
-              点击每个输入框，输入 romaji，实时显示正误
+              {t("pr.quizHint")}
             </p>
           </div>
         )}

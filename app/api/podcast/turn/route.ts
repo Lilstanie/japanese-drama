@@ -12,14 +12,26 @@ const SYSTEM_A = (topic: string, difficulty: string, seed: string) =>
 トピック: ${topic}
 背景: ${seed}`
 
-const SYSTEM_B = (topic: string, difficulty: string, seed: string) =>
-  `你是Wei，26岁中国人，从小在中国长大，日语说得不太好。你和日本朋友Kenji用普通话聊天，因为Kenji想练习中文听力。
+type Lang = "zh" | "en"
+
+const SYSTEM_B = (topic: string, difficulty: string, seed: string, lang: Lang) => {
+  if (lang === "en") {
+    return `You are Wei, 26, who grew up in an English-speaking country and whose Japanese isn't great. You chat with your Japanese friend Kenji in English, because Kenji wants to practice listening to English.
+Reply ONLY in English — never Japanese, even if Kenji speaks Japanese.
+Talk casually, like real friends, not formally. 1-2 short, natural sentences each time.
+Don't prefix your reply with "Wei:" — just speak.
+Topic: ${topic}
+Background: ${seed}
+Level: ${difficulty}`
+  }
+  return `你是Wei，26岁中国人，从小在中国长大，日语说得不太好。你和日本朋友Kenji用普通话聊天，因为Kenji想练习中文听力。
 你只能用普通话（中文）回答，绝对不能说日语——哪怕Kenji说日语，你也用中文回应。
 说话口语化，像真正的朋友聊天，不要文绉绉。每次回复1-2句，简短自然。
 不要在回复前加"Wei:"这样的名字前缀，直接说话。
 话题：${topic}
 背景：${seed}
 难度参考：${difficulty}`
+}
 
 /**
  * Wei stepping out of the conversation to explain the Japanese just spoken.
@@ -148,13 +160,22 @@ const NO_LOOP_ZH = `绝对要求：
 - 不要用「期待」「到时候告诉我」「下次一起」这类客套话收尾。
 - 不要试图总结或结束对话，就当聊天还会继续。`
 
-const SYSTEM_EXPLAIN = (difficulty: string) =>
-  `你是Wei，正在和日本朋友Kenji聊天。现在请你短暂地停一下，用中文向听众解释Kenji刚才说的那句日语。
+const SYSTEM_EXPLAIN = (difficulty: string, lang: Lang) => {
+  if (lang === "en") {
+    return `You are Wei, chatting with your Japanese friend Kenji. Pause briefly and explain to the listener, in English, the Japanese line Kenji just said.
+
+English only. Under 40 words. First give the meaning, then point out one word or grammar point.
+Explain like a friend, casually — not like a textbook, no bullet points, no "Wei:" prefix.
+Don't repeat the whole Japanese line; quote one or two key words at most.
+Learner level: ${difficulty}`
+  }
+  return `你是Wei，正在和日本朋友Kenji聊天。现在请你短暂地停一下，用中文向听众解释Kenji刚才说的那句日语。
 
 只用中文。50字以内。先说这句话的意思，再点出一个词或语法点。
 说话像朋友随口讲解，不要像教科书，不要列条目，不要加"Wei:"前缀。
 不要重复整句日语原文，最多引用一两个关键词。
 学习者水平：${difficulty}`
+}
 
 export async function POST(request: Request) {
   const limited = await enforceRateLimit(request, { name: "podcast-turn", limit: 60, windowSec: 60 })
@@ -163,7 +184,7 @@ export async function POST(request: Request) {
   const bot = await rejectBots()
   if (bot) return bot
 
-  const { topic, difficulty, seed, speaker, history, kind, move, situation } = (await request.json()) as {
+  const { topic, difficulty, seed, speaker, history, kind, move, situation, lang: rawLang } = (await request.json()) as {
     topic: string
     difficulty: string
     seed: string
@@ -172,7 +193,11 @@ export async function POST(request: Request) {
     kind?: "dialogue" | "explain"
     move?: string
     situation?: { season: string; setting: string; mood: string }
+    lang?: string
   }
+
+  // Which language Wei (the non-Japanese speaker) uses. Kenji is always Japanese.
+  const lang: Lang = rawLang === "en" ? "en" : "zh"
 
   const tooLong =
     rejectTooLong(topic, 500, "topic") ??
@@ -195,10 +220,10 @@ export async function POST(request: Request) {
 
   const system =
     kind === "explain"
-      ? SYSTEM_EXPLAIN(difficulty)
+      ? SYSTEM_EXPLAIN(difficulty, lang)
       : speaker === "A"
         ? `${SYSTEM_A(topic, difficulty, seed)}${situationJa}\n\n今回の役割: ${pickMove(MOVE_JA, move ?? "detail")}\n\n${NO_LOOP_JA}`
-        : `${SYSTEM_B(topic, difficulty, seed)}${situationZh}\n\n本轮任务：${pickMove(MOVE_ZH, move ?? "detail")}\n\n${NO_LOOP_ZH}`
+        : `${SYSTEM_B(topic, difficulty, seed, lang)}${situationZh}\n\n本轮任务：${pickMove(MOVE_ZH, move ?? "detail")}\n\n${NO_LOOP_ZH}`
 
   const safeHistory = Array.isArray(history) ? history : []
   const recentHistory = safeHistory.slice(-8)

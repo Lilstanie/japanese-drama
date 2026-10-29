@@ -3,12 +3,24 @@ import { formatChunksForPrompt, retrieve } from "@/lib/rag/index"
 import { enforceRateLimit, rejectBots, rejectTooLong } from "@/lib/rate-limit"
 import type { RetrievedChunk } from "@/lib/rag/types"
 
-const SYSTEM_PROMPT = `你是日语学习知识库助手。你必须优先依据「检索上下文」回答问题。
+type Lang = "zh" | "en"
+
+function systemPrompt(lang: Lang) {
+  if (lang === "en") {
+    return `You are a Japanese-learning knowledge-base assistant. Answer primarily from the "retrieved context".
+Rules:
+1. Use only information in the context; if it is insufficient, clearly say "The knowledge base doesn't have enough information", and you may add general study advice but mark it as not from the knowledge base.
+2. Answer in English, concise and clear.
+3. Cite sources with [1], [2], etc., matching the chunk numbers in the context.
+4. Don't invent specific course policies or features this app doesn't mention.`
+  }
+  return `你是日语学习知识库助手。你必须优先依据「检索上下文」回答问题。
 规则：
 1. 只使用上下文中有的信息；若上下文不足，明确说「知识库中没有足够信息」，可给出一般性学习建议但须标注为非知识库内容。
 2. 回答用中文，简洁清晰，适合面试/学习者阅读。
 3. 引用来源时使用 [1]、[2] 等编号，对应上下文中的片段编号。
 4. 不要编造具体的课程政策或本 App 未提及的功能。`
+}
 
 export async function POST(request: Request) {
   const limited = await enforceRateLimit(request, { name: "rag", limit: 20, windowSec: 60 })
@@ -21,11 +33,14 @@ export async function POST(request: Request) {
     return Response.json({ error: "GROQ_API_KEY is not configured" }, { status: 500 })
   }
 
-  const { query, topK, chunks: clientChunks } = (await request.json()) as {
+  const { query, topK, chunks: clientChunks, lang: rawLang } = (await request.json()) as {
     query?: string
     topK?: number
     chunks?: RetrievedChunk[]
+    lang?: string
   }
+
+  const lang: Lang = rawLang === "en" ? "en" : "zh"
 
   const tooLong = rejectTooLong(query, 1000, "query")
   if (tooLong) return tooLong
@@ -55,7 +70,9 @@ export async function POST(request: Request) {
   }
 
   const context = formatChunksForPrompt(chunks)
-  const userMessage = `用户问题：${q}\n\n检索上下文（共 ${chunks.length} 段）：\n\n${context}`
+  const userMessage = lang === "en"
+    ? `User question: ${q}\n\nRetrieved context (${chunks.length} chunks):\n\n${context}`
+    : `用户问题：${q}\n\n检索上下文（共 ${chunks.length} 段）：\n\n${context}`
 
   const client = createAIClient()
 
@@ -67,7 +84,7 @@ export async function POST(request: Request) {
         const response = await client.chat.completions.create({
           ...chatParams(768),
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
+            { role: "system", content: systemPrompt(lang) },
             { role: "user", content: userMessage },
           ],
           stream: true,

@@ -3,17 +3,27 @@
 import AppNav from "@/components/AppNav"
 import { useCallback, useEffect, useState } from "react"
 import type { RagIndexStats, RetrievedChunk } from "@/lib/rag/types"
+import { useLang } from "@/components/LanguageProvider"
 
-const SAMPLE_QUESTIONS = [
+const SAMPLE_QUESTIONS_ZH = [
   "は 和 が 有什么区别？",
   "居酒屋怎么点单和结账？",
   "Podcast 模式怎么用？",
   "中文学习者学日语常犯什么错？",
 ]
 
+const SAMPLE_QUESTIONS_EN = [
+  "What's the difference between は and が?",
+  "How do you order and pay at an izakaya?",
+  "How does Podcast mode work?",
+  "What mistakes do learners often make in Japanese?",
+]
+
 type PipelineStep = "idle" | "retrieving" | "retrieved" | "generating" | "done" | "error"
 
 export default function RagDemo() {
+  const { lang, t } = useLang()
+  const SAMPLE_QUESTIONS = lang === "en" ? SAMPLE_QUESTIONS_EN : SAMPLE_QUESTIONS_ZH
   const [query, setQuery] = useState("")
   const [topK, setTopK] = useState(4)
   const [step, setStep] = useState<PipelineStep>("idle")
@@ -58,7 +68,7 @@ export default function RagDemo() {
       setStep("retrieved")
 
       if (retrieved.length === 0) {
-        setError("未检索到相关片段，请换一个问题试试。")
+        setError(t("rag.err.none"))
         setStep("error")
         return
       }
@@ -68,7 +78,7 @@ export default function RagDemo() {
       const genRes = await fetch("/api/rag/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q, chunks: retrieved }),
+        body: JSON.stringify({ query: q, chunks: retrieved, lang }),
       })
 
       if (!genRes.ok || !genRes.body) {
@@ -89,10 +99,10 @@ export default function RagDemo() {
 
       setStep("done")
     } catch (e) {
-      setError(e instanceof Error ? e.message : "请求失败")
+      setError(e instanceof Error ? e.message : t("rag.err.req"))
       setStep("error")
     }
-  }, [query, topK])
+  }, [query, topK, lang, t])
 
   return (
     <div
@@ -108,10 +118,10 @@ export default function RagDemo() {
             <AppNav active="rag" />
           </div>
           <h1 className="text-xl font-bold" style={{ color: "#60a5fa" }}>
-            RAG Demo · 日语知识库问答
+            {t("rag.title")}
           </h1>
           <p className="text-sm mt-1" style={{ color: "#6b8299" }}>
-            检索增强生成：分块 → TF-IDF 检索 → Groq 生成（带引用）
+            {t("rag.subtitle")}
           </p>
         </div>
         {stats && (
@@ -119,8 +129,11 @@ export default function RagDemo() {
             className="text-xs rounded-lg border px-3 py-2"
             style={{ borderColor: "#1e2a40", color: "#8aa0b8" }}
           >
-            {stats.documentCount} 篇文档 · {stats.chunkCount} 个分块 ·{" "}
-            {stats.retriever.toUpperCase()}
+            {t("rag.stats", {
+              docs: String(stats.documentCount),
+              chunks: String(stats.chunkCount),
+              retriever: stats.retriever.toUpperCase(),
+            })}
           </div>
         )}
       </header>
@@ -161,12 +174,12 @@ export default function RagDemo() {
           style={{ borderColor: "#1e2a40", background: "#101820" }}
         >
           <label className="text-sm block mb-2" style={{ color: "#8aa0b8" }}>
-            问题
+            {t("rag.question")}
           </label>
           <textarea
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="例如：て形怎么用？居酒屋怎么结账？"
+            placeholder={t("rag.placeholder")}
             rows={2}
             className="w-full rounded-lg border px-3 py-2 text-sm resize-none outline-none focus:ring-2"
             style={{
@@ -205,10 +218,10 @@ export default function RagDemo() {
               style={{ background: "#2563eb", color: "#fff" }}
             >
               {step === "retrieving"
-                ? "检索中…"
+                ? t("rag.retrieving")
                 : step === "generating"
-                  ? "生成中…"
-                  : "运行 RAG"}
+                  ? t("rag.generating")
+                  : t("rag.run")}
             </button>
           </div>
           <div className="flex flex-wrap gap-2 mt-3">
@@ -236,7 +249,7 @@ export default function RagDemo() {
         {chunks.length > 0 && (
           <section>
             <h2 className="text-sm font-semibold mb-3" style={{ color: "#93c5fd" }}>
-              检索结果 ({chunks.length})
+              {t("rag.results")} ({chunks.length})
             </h2>
             <div className="grid gap-3">
               {chunks.map((c) => (
@@ -269,7 +282,7 @@ export default function RagDemo() {
             style={{ borderColor: "#1e3a5f", background: "#0f1824" }}
           >
             <h2 className="text-sm font-semibold mb-3" style={{ color: "#4ade80" }}>
-              生成回答
+              {t("rag.answer")}
             </h2>
             <p className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: "#d4e4f4" }}>
               {answer || "…"}
@@ -283,19 +296,33 @@ export default function RagDemo() {
           style={{ borderColor: "#1e2a40", color: "#6b8299" }}
         >
           <p className="font-semibold mb-2" style={{ color: "#8aa0b8" }}>
-            面试可讲要点
+            {t("rag.cheat")}
           </p>
-          <ul className="list-disc pl-4 space-y-1">
-            <li>
-              <code className="text-[10px]">lib/rag/</code>：corpus → chunk → TF-IDF index → retrieve
-            </li>
-            <li>
-              API 拆分：<code className="text-[10px]">/api/rag/retrieve</code> 与{" "}
-              <code className="text-[10px]">/api/rag/generate</code>，便于演示流水线
-            </li>
-            <li>生产可替换：embedding + pgvector / Pinecone；此处零依赖 TF-IDF 便于本地跑通</li>
-            <li>扩展 Agent：把 retrieve 封装为 tool，LLM 通过 function calling 决定是否检索</li>
-          </ul>
+          {lang === "en" ? (
+            <ul className="list-disc pl-4 space-y-1">
+              <li>
+                <code className="text-[10px]">lib/rag/</code>: corpus → chunk → TF-IDF index → retrieve
+              </li>
+              <li>
+                Split APIs: <code className="text-[10px]">/api/rag/retrieve</code> and{" "}
+                <code className="text-[10px]">/api/rag/generate</code>, so the pipeline is easy to demo
+              </li>
+              <li>Swap for production: embedding + pgvector / Pinecone; zero-dep TF-IDF here runs locally with nothing to set up</li>
+              <li>Extend to an Agent: wrap retrieve as a tool and let the LLM decide via function calling whether to retrieve</li>
+            </ul>
+          ) : (
+            <ul className="list-disc pl-4 space-y-1">
+              <li>
+                <code className="text-[10px]">lib/rag/</code>：corpus → chunk → TF-IDF index → retrieve
+              </li>
+              <li>
+                API 拆分：<code className="text-[10px]">/api/rag/retrieve</code> 与{" "}
+                <code className="text-[10px]">/api/rag/generate</code>，便于演示流水线
+              </li>
+              <li>生产可替换：embedding + pgvector / Pinecone；此处零依赖 TF-IDF 便于本地跑通</li>
+              <li>扩展 Agent：把 retrieve 封装为 tool，LLM 通过 function calling 决定是否检索</li>
+            </ul>
+          )}
         </section>
       </main>
     </div>

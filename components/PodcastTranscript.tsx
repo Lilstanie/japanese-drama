@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import JapaneseText from "@/components/JapaneseText"
+import { useLang } from "@/components/LanguageProvider"
 import type { PodcastLine } from "./PodcastPlayer"
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function PodcastTranscript({ transcript, isGenerating, currentSpeaker, buildProgress }: Props) {
+  const { t } = useLang()
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [pinned, setPinned] = useState(true) // true = auto-scroll to bottom
@@ -57,7 +59,7 @@ export default function PodcastTranscript({ transcript, isGenerating, currentSpe
               />
             </div>
             <p className="text-xs" style={{ color: "#5c3d1e" }}>
-              整段生成后可锁屏播放
+              {t("pc.lockHint")}
             </p>
           </div>
         )}
@@ -65,8 +67,7 @@ export default function PodcastTranscript({ transcript, isGenerating, currentSpe
         {transcript.length === 0 && !isGenerating && !buildProgress && (
           <div className="flex-1 flex items-center justify-center text-center px-6">
             <p className="text-sm leading-relaxed" style={{ color: "#7a5c38" }}>
-              👇 点下方 <span style={{ color: "#f59e0b" }}>▶</span> 开始 —— Kenji 和 Wei
-              会用日中双语自由聊天，可锁屏收听，边开车边学。
+              {t("pc.empty")}
             </p>
           </div>
         )}

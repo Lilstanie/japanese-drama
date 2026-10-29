@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import AppNav from "@/components/AppNav"
 import KatakanaToggle from "@/components/KatakanaToggle"
+import { useLang } from "@/components/LanguageProvider"
+import { LANG_STORAGE_KEY } from "@/lib/i18n"
 import { PODCAST_TOPICS, TOPIC_CATEGORY_LABEL } from "@/lib/podcast-topics"
 import { buildRotation, planSegment, pickSituation, shuffle, SEGMENTS_PER_TOPIC, type Situation } from "@/lib/podcast-plan"
 import {
@@ -52,6 +54,18 @@ const GAP_MS = 400
  */
 const FIRST_EPISODE_LENGTH = 6
 
+/** The UI language at call time — decides whether Wei speaks Chinese or English.
+ *  Read from storage (written by LanguageProvider) so it follows the 中/EN toggle
+ *  without threading `lang` through every caller. */
+function currentLang(): "zh" | "en" {
+  try {
+    if (typeof window === "undefined") return "zh"
+    return JSON.parse(localStorage.getItem(LANG_STORAGE_KEY) || '"zh"') === "en" ? "en" : "zh"
+  } catch {
+    return "zh"
+  }
+}
+
 async function fetchTurn(
   topic: PodcastTopic,
   difficulty: Difficulty,
@@ -69,6 +83,7 @@ async function fetchTurn(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         topic: topic.label, difficulty, seed: topic.seed, speaker, history, kind, move, situation,
+        lang: currentLang(),
       }),
       signal: controller.signal,
     })
@@ -113,6 +128,7 @@ function savePrefs(prefs: object) {
 }
 
 export default function PodcastPlayer() {
+  const { t } = useLang()
   const prefs = typeof window !== "undefined" ? loadPrefs() : null
 
   const [transcript, setTranscript] = useState<PodcastLine[]>([])
@@ -312,7 +328,7 @@ export default function PodcastPlayer() {
       if (!alive()) break
 
       if (!line?.trim()) {
-        setErrorMsg("连接失败，请重试")
+        setErrorMsg(t("scene.err.conn"))
         isPlayingRef.current = false
         setIsPlaying(false)
         break
@@ -577,9 +593,9 @@ export default function PodcastPlayer() {
           disabled={transcript.length === 0}
           className="text-xs px-2.5 py-1.5 rounded-lg border disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           style={{ color: copied ? "#4ade80" : "#7a5c38", borderColor: "#3d2010" }}
-          title="Copy transcript"
+          title={t("pc.copy.title")}
         >
-          {copied ? "✓ 已复制" : "复制对话"}
+          {copied ? t("pc.copied") : t("pc.copy")}
         </button>
         </div>
       </div>
@@ -588,7 +604,7 @@ export default function PodcastPlayer() {
       <div className="flex flex-wrap gap-3 items-center px-4 py-2.5 border-b flex-shrink-0"
         style={{ borderColor: "#3d2010" }}>
         <div className="flex items-center gap-2">
-          <span className="text-xs" style={{ color: "#7a5c38" }}>开始话题</span>
+          <span className="text-xs" style={{ color: "#7a5c38" }}>{t("pc.topic")}</span>
           <select className="text-sm rounded-lg px-2 py-1 border"
             style={{ background: "#261508", color: "#f0d5a0", borderColor: "#5c3d1e" }}
             value={topic.id}
@@ -604,15 +620,15 @@ export default function PodcastPlayer() {
           </select>
           <button
             onClick={handleNextTopic}
-            title="跳到下一个话题"
+            title={t("pc.next.title")}
             className="text-xs px-2 py-1 rounded-lg border transition-colors"
             style={{ background: "transparent", color: "#a07850", borderColor: "#3d2010" }}
           >
-            下一个 ⏭
+            {t("pc.next")}
           </button>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs" style={{ color: "#7a5c38" }}>難易度</span>
+          <span className="text-xs" style={{ color: "#7a5c38" }}>{t("pc.level")}</span>
           <select className="text-sm rounded-lg px-2 py-1 border"
             style={{ background: "#261508", color: "#f0d5a0", borderColor: "#5c3d1e" }}
             value={difficulty}
@@ -661,7 +677,7 @@ export default function PodcastPlayer() {
           style={{ background: "#3d0a0a", borderBottom: "1px solid #7a1a1a" }}>
           <span className="text-sm" style={{ color: "#fca5a5" }}>⚠ {errorMsg}</span>
           <button onClick={startLoop} className="text-xs px-3 py-1 rounded-md"
-            style={{ background: "#7a1a1a", color: "#fca5a5" }}>重试</button>
+            style={{ background: "#7a1a1a", color: "#fca5a5" }}>{t("pc.retry")}</button>
         </div>
       )}
 

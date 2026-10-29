@@ -14,8 +14,13 @@ export function setTTSMode(m: TTSMode) { currentMode = m }
 export function getTTSMode(): TTSMode { return currentMode }
 
 // Detect whether text is Japanese (has hiragana / katakana) or Chinese
-function detectLang(text: string): "ja" | "zh" {
-  return /[ぁ-ゖァ-ヺ]/.test(text) ? "ja" : "zh"
+function detectLang(text: string): "ja" | "zh" | "en" {
+  if (/[ぁ-ゖァ-ヺ]/.test(text)) return "ja"
+  // Han characters mean Chinese here (Wei's lines); otherwise Latin → English,
+  // so an English-speaking Wei is spoken with an English voice, not a Chinese one.
+  if (/[一-龥]/.test(text)) return "zh"
+  if (/[a-zA-Z]/.test(text)) return "en"
+  return "zh"
 }
 
 /**
@@ -166,6 +171,14 @@ async function speakWeb(
       const voice =
         cachedVoices.find(v => v.lang === "ja-JP" && v.name.toLowerCase().includes("male")) ||
         cachedVoices.find(v => v.lang === "ja-JP")
+      if (voice) utterance.voice = voice
+    } else if (lang === "en") {
+      utterance.lang = "en-US"
+      utterance.rate = 0.95 * speed
+      utterance.pitch = 1.05
+      const voice =
+        cachedVoices.find(v => v.lang === "en-US") ||
+        cachedVoices.find(v => v.lang.startsWith("en"))
       if (voice) utterance.voice = voice
     } else {
       utterance.lang = "zh-CN"
