@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { GATE_COOKIE, gateToken, sitePassword } from "@/lib/gate"
+import { GATE_COOKIE, gateToken, isValidAnswer } from "@/lib/gate"
 import { enforceRateLimit } from "@/lib/rate-limit"
 
 export async function POST(request: Request) {
@@ -15,9 +15,9 @@ export async function POST(request: Request) {
     // ignore — empty answer fails below
   }
 
-  const expected = sitePassword()
-  // Fail closed: if no password is configured, accept nothing.
-  if (!expected || answer !== expected) {
+  // Accepts any of the configured answers (case-insensitive); fail-closed when
+  // none are configured.
+  if (!isValidAnswer(answer)) {
     return NextResponse.json({ ok: false }, { status: 401 })
   }
 
