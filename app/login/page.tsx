@@ -53,8 +53,13 @@ export default function LoginPage() {
         className="w-full max-w-xs flex flex-col gap-3 rounded-2xl border p-6"
         style={{ background: "#261508", borderColor: "#5c3d1e" }}
       >
-        <label className="text-sm font-medium" style={{ color: "#f0d5a0" }}>
-          你的名字是？
+        <label className="flex flex-col gap-0.5">
+          <span className="text-sm font-medium" style={{ color: "#f0d5a0" }}>
+            你的名字是？
+          </span>
+          <span className="text-xs" style={{ color: "#a07850" }}>
+            What&apos;s your name?
+          </span>
         </label>
         <input
           type="password"
@@ -62,7 +67,7 @@ export default function LoginPage() {
           onChange={(e) => { setAnswer(e.target.value); setError(false) }}
           autoFocus
           autoComplete="off"
-          placeholder="请输入"
+          placeholder="请输入 · Type here"
           className="rounded-lg px-3 py-2 text-sm outline-none"
           style={{
             background: "#1a0c02",
@@ -73,7 +78,7 @@ export default function LoginPage() {
         />
         {error && (
           <span className="text-xs" style={{ color: "#fca5a5" }}>
-            不对哦，再试试 🙃
+            不对哦，再试试 · Nope, try again 🙃
           </span>
         )}
         <button
@@ -86,7 +91,7 @@ export default function LoginPage() {
             cursor: loading || !answer.trim() ? "not-allowed" : "pointer",
           }}
         >
-          {loading ? "进入中…" : "进入"}
+          {loading ? "进入中… Entering…" : "进入 Enter"}
         </button>
       </form>
     </div>
