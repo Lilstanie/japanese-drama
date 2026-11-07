@@ -25,9 +25,10 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Gate everything except the login page/API, Next internals, and the icons
-  // and logo the login page itself needs to render.
+  // Gate everything except: the login page/API, the public health endpoint (the
+  // external uptime check must reach it without logging in), Next internals, and
+  // the icons and logo the login page itself needs to render.
   matcher: [
-    "/((?!login|api/login|api/logout|_next/static|_next/image|icon.png|apple-icon.png|favicon.ico|logo.png).*)",
+    "/((?!login|api/login|api/logout|api/health|_next/static|_next/image|icon.png|apple-icon.png|favicon.ico|logo.png).*)",
   ],
 }
